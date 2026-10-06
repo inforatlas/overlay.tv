@@ -1,308 +1,242 @@
 <!DOCTYPE html>
-<html lang="pt-BR" class="h-full bg-slate-950 text-slate-100">
+<html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Placar Studio Pro - Overlays para OBS & Live</title>
+  <title>Placar Live Studio - Futebol & Futsal</title>
 
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
-
-  <!-- PeerJS CDN (Realtime P2P WebSockets for OBS Browser Source) -->
+  <!-- PeerJS para Sincronização P2P/WebSocket em Tempo Real (Funciona no OBS) -->
   <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
-
-  <!-- Google Fonts for Sports Scoreboards -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Anton&family=Bangers&family=Inter:wght@400;600;700;900&family=Montserrat:wght@400;700;900&family=Oswald:wght@500;700&family=Roboto:wght@400;700;900&family=Teko:wght@600;700&family=Work+Sans:wght@400;700;900&display=swap" rel="stylesheet">
-
   <!-- Lucide Icons -->
   <script src="https://unpkg.com/lucide@latest"></script>
 
   <style>
-    /* Custom font helpers */
-    .font-teko { font-family: 'Teko', sans-serif; }
-    .font-inter { font-family: 'Inter', sans-serif; }
-    .font-work { font-family: 'Work Sans', sans-serif; }
-    .font-montserrat { font-family: 'Montserrat', sans-serif; }
-    .font-oswald { font-family: 'Oswald', sans-serif; }
-    .font-roboto { font-family: 'Roboto', sans-serif; }
-    .font-anton { font-family: 'Anton', sans-serif; }
-    .font-bangers { font-family: 'Bangers', cursive; }
+    @import url('https://fonts.googleapis.com/css2?family=Teko:wght@600;700&family=Inter:wght@400;600;800;900&display=swap');
 
-    /* Transparent canvas for OBS Studio Browser Source */
-    .obs-transparent-bg {
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+    .font-teko {
+      font-family: 'Teko', sans-serif;
+    }
+
+    /* Transparência do Overlay para o OBS */
+    .bg-overlay-transparent {
       background-color: transparent !important;
-      background: none !important;
     }
 
-    /* Checkered pattern background for control preview */
-    .bg-checkered {
-      background-color: #0f172a;
-      background-image: 
-        radial-gradient(#1e293b 1px, transparent 1px),
-        radial-gradient(#1e293b 1px, #0f172a 1px);
-      background-size: 20px 20px;
-      background-position: 0 0, 10px 10px;
-    }
-
-    /* Custom scrollbars for dark UI */
-    ::-webkit-scrollbar {
-      width: 6px;
-      height: 6px;
-    }
-    ::-webkit-scrollbar-track {
-      background: #090d16;
-    }
-    ::-webkit-scrollbar-thumb {
-      background: #1e293b;
-      border-radius: 4px;
-    }
-    ::-webkit-scrollbar-thumb:hover {
-      background: #334155;
-    }
-
-    /* Glassmorphism utility */
-    .glass-panel {
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
+    /* Estilo de Placar Broadcast (Estilo TV) */
+    .score-glass {
+      background: rgba(15, 23, 42, 0.92);
+      backdrop-filter: blur(8px);
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
     }
   </style>
 </head>
-<body class="h-full font-inter antialiased selection:bg-emerald-500 selection:text-white overflow-x-hidden">
+<body class="bg-slate-900 text-slate-100 min-h-screen">
 
-  <div id="overlay-view" class="hidden fixed inset-0 w-full h-full obs-transparent-bg pointer-events-none select-none z-50">
-    <!-- Dynamic Position Box -->
-    <div id="ov-position-wrapper" class="absolute inset-0 p-6 flex flex-col pointer-events-none transition-all duration-300 items-start justify-start">
-      
-      <!-- SCOREBOARD WIDGET CONTAINER -->
-      <div id="ov-scoreboard-card" class="relative transition-all duration-200 overflow-hidden border flex items-stretch shadow-2xl glass-panel">
+  <!-- ============================================================ -->
+  <!-- MODOS: CONTROLE (OPERADOR) vs OVERLAY (SAÍDA OBS TRANSPARENTE) -->
+  <!-- ============================================================ -->
+
+  <!-- TELA DE OVERLAY (Aparece no OBS Studio quando url tem ?mode=overlay) -->
+  <div id="overlay-view" class="hidden fixed inset-0 w-full h-full bg-overlay-transparent flex flex-col justify-between p-8 pointer-events-none select-none">
+    
+    <!-- Top Bar Scoreboard -->
+    <div id="scoreboard-render" class="w-full flex justify-center items-start">
+      <div class="score-glass rounded-xl overflow-hidden flex items-center border border-slate-700/50 shadow-2xl transition-all duration-300">
         
-        <!-- Tournament / Period Tag -->
-        <div id="ov-badge-box" class="px-4 py-2 flex flex-col items-center justify-center border-r transition-all min-w-[100px]">
-          <span id="ov-tournament" class="text-[10px] font-black tracking-widest uppercase truncate max-w-[130px]">COPA FUTSAL 2026</span>
-          <span id="ov-period" class="text-xs font-black tracking-wider uppercase">1º TEMPO</span>
+        <!-- Título do Torneio / Período -->
+        <div class="bg-slate-950 px-4 py-2 flex flex-col items-center justify-center border-r border-slate-800">
+          <span id="ov-tournament" class="text-[10px] uppercase tracking-widest text-emerald-400 font-bold">LIGA FUTSAL</span>
+          <span id="ov-period" class="text-xs font-black text-slate-300">1º TEMPO</span>
         </div>
 
-        <!-- Team A (Home) -->
-        <div id="ov-home-box" class="flex items-center gap-3 px-5 py-2 transition-all">
-          <img id="ov-home-logo" src="https://via.placeholder.com/40?text=A" class="w-10 h-10 object-contain rounded-full bg-slate-900/40 p-1 border border-white/10" alt="Logo Home">
-          <span id="ov-home-name" class="font-black tracking-wide uppercase max-w-[160px] truncate">TIME A</span>
+        <!-- Time Mandante (Home) -->
+        <div class="flex items-center gap-3 px-5 py-2">
+          <img id="ov-home-logo" src="https://via.placeholder.com/40?text=A" class="w-9 h-9 object-contain rounded-full bg-slate-800/80 p-1" alt="Logo Home">
+          <span id="ov-home-name" class="font-black text-xl tracking-wide uppercase max-w-[140px] truncate">TIME A</span>
           
-          <!-- Home Futsal Fouls -->
-          <div id="ov-home-fouls-container" class="flex gap-1 ml-1.5">
-            <span class="ov-foul-dot w-2.5 h-2.5 rounded-full border"></span>
-            <span class="ov-foul-dot w-2.5 h-2.5 rounded-full border"></span>
-            <span class="ov-foul-dot w-2.5 h-2.5 rounded-full border"></span>
-            <span class="ov-foul-dot w-2.5 h-2.5 rounded-full border"></span>
-            <span class="ov-foul-dot w-2.5 h-2.5 rounded-full border"></span>
+          <!-- Faltas Acumuladas Futsal -->
+          <div id="ov-home-fouls-container" class="flex gap-1 ml-1">
+            <span class="ov-foul-dot w-2 h-2 rounded-full bg-slate-700"></span>
+            <span class="ov-foul-dot w-2 h-2 rounded-full bg-slate-700"></span>
+            <span class="ov-foul-dot w-2 h-2 rounded-full bg-slate-700"></span>
+            <span class="ov-foul-dot w-2 h-2 rounded-full bg-slate-700"></span>
+            <span class="ov-foul-dot w-2 h-2 rounded-full bg-slate-700"></span>
           </div>
         </div>
 
-        <!-- Scores & Timer Container -->
-        <div id="ov-center-box" class="flex items-center px-5 py-2 border-x gap-4 transition-all">
-          <span id="ov-home-score" class="font-bold min-w-[36px] text-center leading-none">0</span>
+        <!-- Placar e Cronômetro -->
+        <div class="flex items-center bg-slate-950 px-4 py-1 border-x border-slate-800 gap-3">
+          <span id="ov-home-score" class="font-teko text-5xl font-bold text-white min-w-[36px] text-center leading-none">0</span>
           
-          <!-- Timer Column -->
-          <div id="ov-timer-box" class="flex flex-col items-center justify-center px-1">
-            <span id="ov-timer" class="font-bold tracking-wider leading-none">20:00</span>
-            <span id="ov-timer-status" class="text-[9px] font-black uppercase tracking-widest mt-0.5">PAUSADO</span>
+          <div class="flex flex-col items-center px-2">
+            <span id="ov-timer" class="font-teko text-3xl font-bold text-amber-400 tracking-wider leading-none">20:00</span>
+            <span id="ov-timer-status" class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">PAUSADO</span>
           </div>
 
-          <span id="ov-away-score" class="font-bold min-w-[36px] text-center leading-none">0</span>
+          <span id="ov-away-score" class="font-teko text-5xl font-bold text-white min-w-[36px] text-center leading-none">0</span>
         </div>
 
-        <!-- Team B (Away) -->
-        <div id="ov-away-box" class="flex items-center gap-3 px-5 py-2 transition-all">
-          <!-- Away Futsal Fouls -->
-          <div id="ov-away-fouls-container" class="flex gap-1 mr-1.5">
-            <span class="ov-foul-dot-away w-2.5 h-2.5 rounded-full border"></span>
-            <span class="ov-foul-dot-away w-2.5 h-2.5 rounded-full border"></span>
-            <span class="ov-foul-dot-away w-2.5 h-2.5 rounded-full border"></span>
-            <span class="ov-foul-dot-away w-2.5 h-2.5 rounded-full border"></span>
-            <span class="ov-foul-dot-away w-2.5 h-2.5 rounded-full border"></span>
+        <!-- Time Visitante (Away) -->
+        <div class="flex items-center gap-3 px-5 py-2">
+          <!-- Faltas Acumuladas Futsal -->
+          <div id="ov-away-fouls-container" class="flex gap-1 mr-1">
+            <span class="ov-foul-dot-away w-2 h-2 rounded-full bg-slate-700"></span>
+            <span class="ov-foul-dot-away w-2 h-2 rounded-full bg-slate-700"></span>
+            <span class="ov-foul-dot-away w-2 h-2 rounded-full bg-slate-700"></span>
+            <span class="ov-foul-dot-away w-2 h-2 rounded-full bg-slate-700"></span>
+            <span class="ov-foul-dot-away w-2 h-2 rounded-full bg-slate-700"></span>
           </div>
 
-          <span id="ov-away-name" class="font-black tracking-wide uppercase max-w-[160px] truncate">TIME B</span>
-          <img id="ov-away-logo" src="https://via.placeholder.com/40?text=B" class="w-10 h-10 object-contain rounded-full bg-slate-900/40 p-1 border border-white/10" alt="Logo Away">
+          <span id="ov-away-name" class="font-black text-xl tracking-wide uppercase max-w-[140px] truncate">TIME B</span>
+          <img id="ov-away-logo" src="https://via.placeholder.com/40?text=B" class="w-9 h-9 object-contain rounded-full bg-slate-800/80 p-1" alt="Logo Away">
         </div>
 
       </div>
     </div>
 
-    <!-- Floating Connection Alert for Overlay OBS -->
-    <div id="ov-status" class="fixed bottom-4 right-4 bg-slate-900/90 text-xs px-4 py-2 rounded-full text-slate-300 border border-slate-700 flex items-center gap-2.5 shadow-2xl pointer-events-auto">
-      <span class="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" id="ov-status-dot"></span>
-      <span id="ov-status-text" class="font-bold">Aguardando Conexão com o Painel...</span>
+    <!-- Status de Conexão no Overlay (Sumi de tela automaticamente) -->
+    <div id="ov-status" class="fixed bottom-4 right-4 bg-slate-900/90 text-xs px-3 py-1.5 rounded-full text-slate-400 border border-slate-700 flex items-center gap-2 pointer-events-auto">
+      <span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse" id="ov-status-dot"></span>
+      <span id="ov-status-text">Conectando ao Painel...</span>
     </div>
   </div>
 
 
-  <div id="control-view" class="min-h-screen flex flex-col bg-slate-950">
+  <!-- ============================================================ -->
+  <!-- PAINEL DE CONTROLE DO OPERADOR (Navegador) -->
+  <!-- ============================================================ -->
+  <div id="control-view" class="max-w-7xl mx-auto p-4 md:p-6 space-y-6">
     
-    <!-- TOP NAVBAR -->
-    <header class="bg-slate-900 border-b border-slate-800 sticky top-0 z-40 shadow-xl">
-      <div class="max-w-[1700px] mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
-        
-        <!-- Brand Logo & Title -->
-        <div class="flex items-center gap-3">
-          <div class="p-2 bg-gradient-to-tr from-emerald-600 to-teal-500 text-white rounded-xl shadow-lg shadow-emerald-500/20">
-            <i data-lucide="layout-template" class="w-5 h-5"></i>
-          </div>
-          <div>
-            <h1 class="text-base font-black text-white tracking-tight flex items-center gap-2">
-              PLACAR STUDIO PRO
-              <span class="text-[10px] bg-emerald-500/10 text-emerald-400 font-bold px-2 py-0.5 rounded-full border border-emerald-500/20">Estilo Overlays.uno</span>
-            </h1>
-            <p class="text-[11px] text-slate-400">Gerenciador de Overlay Transparente para OBS Studio</p>
-          </div>
+    <!-- Cabeçalho & Conexão OBS -->
+    <header class="bg-slate-800/80 rounded-2xl p-4 md:p-6 border border-slate-700 flex flex-col md:flex-row items-center justify-between gap-4 shadow-xl">
+      <div class="flex items-center gap-3">
+        <div class="p-3 bg-emerald-500/20 text-emerald-400 rounded-xl border border-emerald-500/30">
+          <i data-lucide="tv" class="w-8 h-8"></i>
+        </div>
+        <div>
+          <h1 class="text-2xl font-black tracking-tight text-white flex items-center gap-2">
+            PLACAR LIVE STUDIO
+            <span class="text-xs bg-emerald-500/10 text-emerald-400 px-2.5 py-0.5 rounded-full border border-emerald-500/20 font-semibold">OBS Ready</span>
+          </h1>
+          <p class="text-xs text-slate-400">Controle de Placar para Transmissões Esportivas (Futsal & Futebol)</p>
+        </div>
+      </div>
+
+      <!-- Caixa de Link OBS -->
+      <div class="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto bg-slate-900 p-3 rounded-xl border border-slate-700">
+        <div class="flex items-center gap-2 text-xs text-slate-300">
+          <span id="peer-status-dot" class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+          <span>Status OBS: <strong id="peer-status-text" class="text-slate-200">Aguardando Conexão</strong></span>
         </div>
 
-        <!-- Connection Bar & OBS Link -->
-        <div class="flex items-center gap-3">
-          <div class="hidden md:flex items-center gap-2 bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800 text-xs">
-            <span id="peer-status-dot" class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
-            <span class="text-slate-400">OBS:</span>
-            <strong id="peer-status-text" class="text-slate-200">Aguardando...</strong>
-          </div>
-
-          <button onclick="copyOBSLink()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition-all flex items-center gap-2 shadow-lg shadow-emerald-600/20">
-            <i data-lucide="link-2" class="w-4 h-4"></i>
-            Copiar Link para o OBS
-          </button>
-        </div>
-
+        <button onclick="copyOBSLink()" class="w-full sm:w-auto px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-lg transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20">
+          <i data-lucide="copy" class="w-4 h-4"></i>
+          Copiar Link para o OBS Studio
+        </button>
       </div>
     </header>
 
-    <!-- MAIN DASHBOARD CONTENT (Split Grid) -->
-    <div class="flex-1 max-w-[1700px] w-full mx-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+    <!-- Grade Principal de Controle -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
       
+      <!-- COLUNA DA ESQUERDA: Cronômetro & Controles Rápidos (Lg: 7 cols) -->
       <div class="lg:col-span-7 space-y-6">
         
-        <!-- PREVIEW CANVAS BOX -->
-        <div class="bg-slate-900 rounded-2xl border border-slate-800 p-4 shadow-xl">
-          <div class="flex items-center justify-between mb-3">
-            <span class="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-              <span class="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
-              Pré-Visualização do Overlay em Tempo Real
-            </span>
-            <span class="text-[11px] text-slate-500 flex items-center gap-1">
-              <i data-lucide="eye" class="w-3.5 h-3.5"></i> Fundo Transparente no OBS
-            </span>
-          </div>
-
-          <!-- Preview Render Screen -->
-          <div class="relative w-full h-[220px] sm:h-[280px] rounded-xl overflow-hidden bg-checkered border border-slate-800 flex items-center justify-center p-4">
-            <!-- Simulated pitch graphic -->
-            <div class="absolute inset-0 opacity-5 pointer-events-none flex items-center justify-center">
-              <div class="w-64 h-64 border-2 border-white rounded-full flex items-center justify-center">
-                <div class="w-full border-b border-white"></div>
-              </div>
-            </div>
-
-            <!-- PREVIEW MOUNT CONTAINER -->
-            <div id="prev-mount-wrapper" class="w-full h-full relative flex items-center justify-center pointer-events-none">
-              <!-- Rendered Scoreboard Copy -->
-            </div>
-          </div>
-        </div>
-
-        <!-- QUICK MATCH CONTROLS & TIMING CARD -->
-        <div class="bg-slate-900 rounded-2xl border border-slate-800 p-5 shadow-xl space-y-6">
-          
-          <!-- Timer Controls Header -->
-          <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-4">
+        <!-- CARD DO CRONÔMETRO -->
+        <div class="bg-slate-800/90 rounded-2xl p-6 border border-slate-700 shadow-xl space-y-6">
+          <div class="flex items-center justify-between border-b border-slate-700/60 pb-4">
+            <h2 class="text-sm font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+              <i data-lucide="timer" class="w-4 h-4 text-amber-400"></i> Cronômetro & Tempo de Jogo
+            </h2>
             <div class="flex items-center gap-2">
-              <i data-lucide="timer" class="w-5 h-5 text-amber-400"></i>
-              <h2 class="text-sm font-bold text-slate-200 uppercase tracking-wider">Controle do Cronômetro</h2>
-            </div>
-
-            <!-- Sport Mode Presets -->
-            <div class="flex items-center gap-2 bg-slate-950 p-1 rounded-xl border border-slate-800">
               <button onclick="setSportMode('futsal')" id="btn-mode-futsal" class="px-3 py-1 rounded-lg text-xs font-bold bg-emerald-600 text-white">Futsal (20m)</button>
-              <button onclick="setSportMode('futebol')" id="btn-mode-futebol" class="px-3 py-1 rounded-lg text-xs font-bold text-slate-400 hover:text-white">Futebol (45m)</button>
+              <button onclick="setSportMode('futebol')" id="btn-mode-futebol" class="px-3 py-1 rounded-lg text-xs font-bold bg-slate-700 text-slate-300 hover:bg-slate-600">Futebol (45m)</button>
             </div>
           </div>
 
-          <!-- Clock Display & Action Buttons -->
-          <div class="grid grid-cols-1 sm:grid-cols-12 gap-4 items-center">
-            
-            <!-- Timer Big Display -->
-            <div class="sm:col-span-5 bg-slate-950 py-4 px-6 rounded-2xl border border-slate-800 text-center">
-              <div id="ctrl-timer-display" class="font-teko text-7xl font-bold text-amber-400 tracking-wider leading-none">20:00</div>
-              <span id="ctrl-period-display" class="text-xs font-black tracking-widest text-slate-400 uppercase mt-1 block">1º TEMPO</span>
-            </div>
-
-            <!-- Main Buttons -->
-            <div class="sm:col-span-7 grid grid-cols-2 gap-3">
-              <button onclick="toggleTimer()" id="btn-timer-toggle" class="col-span-2 py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-sm rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20">
-                <i data-lucide="play" class="w-5 h-5"></i> INICIAR TEMPO
-              </button>
-              <button onclick="resetTimer()" class="py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs rounded-xl transition-all border border-slate-700 flex items-center justify-center gap-1.5">
-                <i data-lucide="rotate-ccw" class="w-4 h-4"></i> REINICIAR
-              </button>
-              <button onclick="nextPeriod()" class="py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs rounded-xl transition-all border border-slate-700 flex items-center justify-center gap-1.5">
-                <i data-lucide="skip-forward" class="w-4 h-4"></i> PRÓX. TEMPO
-              </button>
-            </div>
-
+          <!-- Display Digital do Tempo -->
+          <div class="flex flex-col items-center justify-center bg-slate-950 p-6 rounded-2xl border border-slate-800 shadow-inner">
+            <div id="ctrl-timer-display" class="font-teko text-7xl md:text-8xl font-bold text-amber-400 tracking-wider leading-none">20:00</div>
+            <span id="ctrl-period-display" class="text-xs font-black tracking-widest text-slate-400 uppercase mt-2">1º TEMPO</span>
           </div>
 
-          <!-- Quick Minute Adjusters -->
-          <div class="flex flex-wrap items-center justify-center gap-2 pt-2 border-t border-slate-800">
-            <span class="text-xs text-slate-500 font-medium mr-2">Ajuste rápido:</span>
-            <button onclick="adjustTime(60)" class="px-3 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-xs font-bold text-slate-300">+1 Min</button>
-            <button onclick="adjustTime(-60)" class="px-3 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-xs font-bold text-slate-300">-1 Min</button>
-            <button onclick="adjustTime(10)" class="px-3 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-xs font-bold text-slate-300">+10 Seg</button>
-            <button onclick="adjustTime(-10)" class="px-3 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-xs font-bold text-slate-300">-10 Seg</button>
+          <!-- Controles de Play/Pause/Reset -->
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <button onclick="toggleTimer()" id="btn-timer-toggle" class="col-span-2 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-sm rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20">
+              <i data-lucide="play" class="w-5 h-5"></i> INICIAR TEMPO
+            </button>
+            <button onclick="resetTimer()" class="py-3 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5">
+              <i data-lucide="rotate-ccw" class="w-4 h-4"></i> REINICIAR
+            </button>
+            <button onclick="nextPeriod()" class="py-3 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5">
+              <i data-lucide="skip-forward" class="w-4 h-4"></i> PRÓX. TEMPO
+            </button>
+          </div>
+
+          <!-- Ajuste Manual de Minutos/Segundos -->
+          <div class="flex items-center justify-center gap-3 pt-2">
+            <span class="text-xs text-slate-400 font-medium">Ajuste rápido:</span>
+            <button onclick="adjustTime(60)" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs text-slate-200 font-bold">+1 Min</button>
+            <button onclick="adjustTime(-60)" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs text-slate-200 font-bold">-1 Min</button>
+            <button onclick="adjustTime(10)" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs text-slate-200 font-bold">+10 Seg</button>
+            <button onclick="adjustTime(-10)" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs text-slate-200 font-bold">-10 Seg</button>
           </div>
         </div>
 
-        <!-- TEAMS SCORE & FOULS QUICK CONTROLLER CARD -->
+
+        <!-- CONTROLE DO PLACAR DOS TIMES -->
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
           
-          <!-- HOME TEAM CONTROLLER -->
-          <div class="bg-slate-900 rounded-2xl border border-slate-800 p-5 shadow-xl space-y-4">
-            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+          <!-- TIME MANDANTE (HOME) -->
+          <div class="bg-slate-800/90 rounded-2xl p-5 border border-slate-700 shadow-xl space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-700 pb-2">
               <span class="text-xs font-bold text-emerald-400 uppercase tracking-wider">Mandante (Home)</span>
-              <span id="ctrl-home-score" class="font-teko text-5xl font-bold text-white leading-none">0</span>
+              <span id="ctrl-home-score" class="font-teko text-4xl font-bold text-white">0</span>
             </div>
 
             <div class="flex items-center gap-3">
               <button onclick="updateScore('home', 1)" class="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-lg rounded-xl transition-all shadow-lg shadow-emerald-600/20">+ GOL</button>
-              <button onclick="updateScore('home', -1)" class="px-4 py-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 font-bold text-base rounded-xl transition-all">-1</button>
+              <button onclick="updateScore('home', -1)" class="px-4 py-3 bg-slate-700 hover:bg-slate-600 text-slate-300 font-bold text-base rounded-xl transition-all">-1</button>
             </div>
 
-            <!-- Futsal Fouls -->
-            <div id="ctrl-home-fouls-box" class="pt-3 border-t border-slate-800">
+            <!-- Faltas Futsal -->
+            <div id="ctrl-home-fouls-box" class="pt-2 border-t border-slate-700/60">
               <div class="flex items-center justify-between text-xs mb-2">
-                <span class="text-slate-400 font-semibold">Faltas: <strong id="ctrl-home-fouls-num" class="text-white">0</strong>/5</span>
-                <button onclick="resetFouls('home')" class="text-[10px] text-slate-500 hover:text-rose-400 underline">Zerar</button>
+                <span class="text-slate-400 font-semibold">Faltas (Futsal): <strong id="ctrl-home-fouls-num" class="text-white">0</strong>/5</span>
+                <button onclick="resetFouls('home')" class="text-[10px] text-slate-400 hover:text-rose-400 underline">Zerar</button>
               </div>
-              <button onclick="addFoul('home')" class="w-full py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-bold rounded-lg transition-all">+ Dar Falta</button>
+              <div class="flex gap-2">
+                <button onclick="addFoul('home')" class="flex-1 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs font-bold rounded-lg">+ Falta</button>
+              </div>
             </div>
           </div>
 
-          <!-- AWAY TEAM CONTROLLER -->
-          <div class="bg-slate-900 rounded-2xl border border-slate-800 p-5 shadow-xl space-y-4">
-            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+          <!-- TIME VISITANTE (AWAY) -->
+          <div class="bg-slate-800/90 rounded-2xl p-5 border border-slate-700 shadow-xl space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-700 pb-2">
               <span class="text-xs font-bold text-blue-400 uppercase tracking-wider">Visitante (Away)</span>
-              <span id="ctrl-away-score" class="font-teko text-5xl font-bold text-white leading-none">0</span>
+              <span id="ctrl-away-score" class="font-teko text-4xl font-bold text-white">0</span>
             </div>
 
             <div class="flex items-center gap-3">
               <button onclick="updateScore('away', 1)" class="flex-1 py-3 bg-blue-600 hover:bg-blue-500 text-white font-black text-lg rounded-xl transition-all shadow-lg shadow-blue-600/20">+ GOL</button>
-              <button onclick="updateScore('away', -1)" class="px-4 py-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 font-bold text-base rounded-xl transition-all">-1</button>
+              <button onclick="updateScore('away', -1)" class="px-4 py-3 bg-slate-700 hover:bg-slate-600 text-slate-300 font-bold text-base rounded-xl transition-all">-1</button>
             </div>
 
-            <!-- Futsal Fouls -->
-            <div id="ctrl-away-fouls-box" class="pt-3 border-t border-slate-800">
+            <!-- Faltas Futsal -->
+            <div id="ctrl-away-fouls-box" class="pt-2 border-t border-slate-700/60">
               <div class="flex items-center justify-between text-xs mb-2">
-                <span class="text-slate-400 font-semibold">Faltas: <strong id="ctrl-away-fouls-num" class="text-white">0</strong>/5</span>
-                <button onclick="resetFouls('away')" class="text-[10px] text-slate-500 hover:text-rose-400 underline">Zerar</button>
+                <span class="text-slate-400 font-semibold">Faltas (Futsal): <strong id="ctrl-away-fouls-num" class="text-white">0</strong>/5</span>
+                <button onclick="resetFouls('away')" class="text-[10px] text-slate-400 hover:text-rose-400 underline">Zerar</button>
               </div>
-              <button onclick="addFoul('away')" class="w-full py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-bold rounded-lg transition-all">+ Dar Falta</button>
+              <div class="flex gap-2">
+                <button onclick="addFoul('away')" class="flex-1 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs font-bold rounded-lg">+ Falta</button>
+              </div>
             </div>
           </div>
 
@@ -311,176 +245,53 @@
       </div>
 
 
+      <!-- COLUNA DA DIREITA: Configuração de Nomes, Logos e Torneio (Lg: 5 cols) -->
       <div class="lg:col-span-5 space-y-6">
         
-        <div class="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden shadow-xl">
-          
-          <!-- CUSTOMIZER TABS HEADER -->
-          <div class="flex border-b border-slate-800 bg-slate-950 p-1.5 gap-1">
-            <button onclick="switchTab('tab-teams')" id="tab-btn-teams" class="flex-1 py-2 text-xs font-bold rounded-xl bg-slate-800 text-emerald-400 flex items-center justify-center gap-1.5 transition-all">
-              <i data-lucide="shield" class="w-3.5 h-3.5"></i> Times
-            </button>
-            <button onclick="switchTab('tab-visuals')" id="tab-btn-visuals" class="flex-1 py-2 text-xs font-bold rounded-xl text-slate-400 hover:text-slate-200 flex items-center justify-center gap-1.5 transition-all">
-              <i data-lucide="palette" class="w-3.5 h-3.5"></i> Visual & Cores
-            </button>
-            <button onclick="switchTab('tab-position')" id="tab-btn-position" class="flex-1 py-2 text-xs font-bold rounded-xl text-slate-400 hover:text-slate-200 flex items-center justify-center gap-1.5 transition-all">
-              <i data-lucide="move" class="w-3.5 h-3.5"></i> Posição
-            </button>
+        <div class="bg-slate-800/90 rounded-2xl p-6 border border-slate-700 shadow-xl space-y-5">
+          <h2 class="text-sm font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2 border-b border-slate-700/60 pb-3">
+            <i data-lucide="settings" class="w-4 h-4 text-emerald-400"></i> Personalização da Partida
+          </h2>
+
+          <!-- Torneio -->
+          <div>
+            <label class="block text-xs text-slate-400 font-semibold mb-1">Nome do Torneio / Campeonato</label>
+            <input type="text" id="in-tournament" value="LIGA FUTSAL 2026" oninput="updateSettings()" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500">
           </div>
 
-          <div class="p-6 space-y-5">
+          <!-- Time Mandante -->
+          <div class="space-y-2 pt-2 border-t border-slate-700/50">
+            <label class="block text-xs font-bold text-emerald-400 uppercase">Time Mandante</label>
+            <input type="text" id="in-home-name" value="TIME A" oninput="updateSettings()" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500" placeholder="Nome do Time">
             
-            <!-- TAB 1: TEAMS & CONTENT -->
-            <div id="tab-teams" class="space-y-4">
-              <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Edição de Nomes e Escudos</h3>
-
-              <!-- Tournament Input -->
-              <div>
-                <label class="block text-xs font-semibold text-slate-400 mb-1">Nome do Torneio / Campeonato</label>
-                <input type="text" id="in-tournament" value="COPA FUTSAL 2026" oninput="updateSettings()" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-emerald-500">
-              </div>
-
-              <!-- Team Home Config -->
-              <div class="space-y-2 pt-3 border-t border-slate-800">
-                <label class="block text-xs font-bold text-emerald-400 uppercase">Mandante (Time A)</label>
-                <input type="text" id="in-home-name" value="TIME A" oninput="updateSettings()" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-emerald-500" placeholder="Nome do Time">
-                
-                <div class="flex items-center gap-2">
-                  <input type="text" id="in-home-logo" value="https://via.placeholder.com/40?text=A" oninput="updateSettings()" class="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-300" placeholder="URL da Logo">
-                  <label class="cursor-pointer bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs px-3 py-2 rounded-xl text-slate-200 font-bold flex items-center gap-1.5">
-                    <i data-lucide="upload" class="w-3.5 h-3.5"></i> Upload
-                    <input type="file" accept="image/*" onchange="handleFileUpload(event, 'home')" class="hidden">
-                  </label>
-                </div>
-              </div>
-
-              <!-- Team Away Config -->
-              <div class="space-y-2 pt-3 border-t border-slate-800">
-                <label class="block text-xs font-bold text-blue-400 uppercase">Visitante (Time B)</label>
-                <input type="text" id="in-away-name" value="TIME B" oninput="updateSettings()" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-emerald-500" placeholder="Nome do Time">
-                
-                <div class="flex items-center gap-2">
-                  <input type="text" id="in-away-logo" value="https://via.placeholder.com/40?text=B" oninput="updateSettings()" class="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-300" placeholder="URL da Logo">
-                  <label class="cursor-pointer bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs px-3 py-2 rounded-xl text-slate-200 font-bold flex items-center gap-1.5">
-                    <i data-lucide="upload" class="w-3.5 h-3.5"></i> Upload
-                    <input type="file" accept="image/*" onchange="handleFileUpload(event, 'away')" class="hidden">
-                  </label>
-                </div>
-              </div>
+            <div class="flex items-center gap-2">
+              <input type="text" id="in-home-logo" value="https://via.placeholder.com/40?text=A" oninput="updateSettings()" class="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-300" placeholder="URL da Logo">
+              <label class="cursor-pointer bg-slate-700 hover:bg-slate-600 text-xs px-3 py-2 rounded-xl text-slate-200 font-bold flex items-center gap-1">
+                <i data-lucide="upload" class="w-3.5 h-3.5"></i> Arquivo
+                <input type="file" accept="image/*" onchange="handleFileUpload(event, 'home')" class="hidden">
+              </label>
             </div>
+          </div>
 
-            <!-- TAB 2: VISUALS, COLORS & FONTS -->
-            <div id="tab-visuals" class="hidden space-y-4">
-              <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Cores e Fontes do Placar</h3>
-
-              <div class="grid grid-cols-2 gap-3">
-                <!-- Scoreboard Background Color -->
-                <div>
-                  <label class="block text-[11px] font-medium text-slate-400 mb-1">Fundo do Placar</label>
-                  <div class="flex items-center gap-2">
-                    <input type="color" id="in-bg-color" value="#0f172a" onchange="updateSettings()" class="w-9 h-9 rounded-lg bg-transparent border border-slate-700 cursor-pointer">
-                    <input type="text" id="in-bg-color-txt" value="#0f172a" oninput="syncColorInput('in-bg-color', this.value)" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-1.5 text-xs text-white">
-                  </div>
-                </div>
-
-                <!-- Accent/Border Color -->
-                <div>
-                  <label class="block text-[11px] font-medium text-slate-400 mb-1">Cor da Borda</label>
-                  <div class="flex items-center gap-2">
-                    <input type="color" id="in-border-color" value="#1e293b" onchange="updateSettings()" class="w-9 h-9 rounded-lg bg-transparent border border-slate-700 cursor-pointer">
-                    <input type="text" id="in-border-color-txt" value="#1e293b" oninput="syncColorInput('in-border-color', this.value)" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-1.5 text-xs text-white">
-                  </div>
-                </div>
-
-                <!-- Team Text Color -->
-                <div>
-                  <label class="block text-[11px] font-medium text-slate-400 mb-1">Texto dos Times</label>
-                  <div class="flex items-center gap-2">
-                    <input type="color" id="in-team-text-color" value="#ffffff" onchange="updateSettings()" class="w-9 h-9 rounded-lg bg-transparent border border-slate-700 cursor-pointer">
-                    <input type="text" id="in-team-text-color-txt" value="#ffffff" oninput="syncColorInput('in-team-text-color', this.value)" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-1.5 text-xs text-white">
-                  </div>
-                </div>
-
-                <!-- Timer Color -->
-                <div>
-                  <label class="block text-[11px] font-medium text-slate-400 mb-1">Cor do Relógio</label>
-                  <div class="flex items-center gap-2">
-                    <input type="color" id="in-timer-color" value="#fbbf24" onchange="updateSettings()" class="w-9 h-9 rounded-lg bg-transparent border border-slate-700 cursor-pointer">
-                    <input type="text" id="in-timer-color-txt" value="#fbbf24" oninput="syncColorInput('in-timer-color', this.value)" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-1.5 text-xs text-white">
-                  </div>
-                </div>
-              </div>
-
-              <!-- Font Family Selector -->
-              <div>
-                <label class="block text-[11px] font-medium text-slate-400 mb-1">Fonte Principal</label>
-                <select id="in-font-family" onchange="updateSettings()" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-2 text-xs text-white">
-                  <option value="font-teko">Teko (Estilo TV Esportes)</option>
-                  <option value="font-inter">Inter (Moderno Clean)</option>
-                  <option value="font-montserrat">Montserrat (Impacto)</option>
-                  <option value="font-oswald">Oswald (Compacto)</option>
-                  <option value="font-anton">Anton (Heavy)</option>
-                </select>
-              </div>
-
-              <!-- Border Radius & Opacity Sliders -->
-              <div class="grid grid-cols-2 gap-3 pt-2 border-t border-slate-800">
-                <div>
-                  <label class="block text-[11px] font-medium text-slate-400 mb-1">Arredondamento: <span id="val-radius">16px</span></label>
-                  <input type="range" id="in-radius" min="0" max="30" value="16" oninput="updateSettings()" class="w-full accent-emerald-500">
-                </div>
-                <div>
-                  <label class="block text-[11px] font-medium text-slate-400 mb-1">Opacidade Fundo: <span id="val-opacity">95%</span></label>
-                  <input type="range" id="in-opacity" min="20" max="100" value="95" oninput="updateSettings()" class="w-full accent-emerald-500">
-                </div>
-              </div>
-
-              <!-- Element Toggles -->
-              <div class="space-y-2 pt-2 border-t border-slate-800">
-                <label class="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" id="toggle-logos" checked onchange="updateSettings()" class="rounded bg-slate-950 border-slate-800 text-emerald-500 focus:ring-0">
-                  <span class="text-xs text-slate-300">Exibir Escudos / Logos</span>
-                </label>
-                <label class="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" id="toggle-badge" checked onchange="updateSettings()" class="rounded bg-slate-950 border-slate-800 text-emerald-500 focus:ring-0">
-                  <span class="text-xs text-slate-300">Exibir Nome do Torneio</span>
-                </label>
-              </div>
+          <!-- Time Visitante -->
+          <div class="space-y-2 pt-2 border-t border-slate-700/50">
+            <label class="block text-xs font-bold text-blue-400 uppercase">Time Visitante</label>
+            <input type="text" id="in-away-name" value="TIME B" oninput="updateSettings()" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500" placeholder="Nome do Time">
+            
+            <div class="flex items-center gap-2">
+              <input type="text" id="in-away-logo" value="https://via.placeholder.com/40?text=B" oninput="updateSettings()" class="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-300" placeholder="URL da Logo">
+              <label class="cursor-pointer bg-slate-700 hover:bg-slate-600 text-xs px-3 py-2 rounded-xl text-slate-200 font-bold flex items-center gap-1">
+                <i data-lucide="upload" class="w-3.5 h-3.5"></i> Arquivo
+                <input type="file" accept="image/*" onchange="handleFileUpload(event, 'away')" class="hidden">
+              </label>
             </div>
+          </div>
 
-            <!-- TAB 3: POSITIONING ON SCREEN -->
-            <div id="tab-position" class="hidden space-y-4">
-              <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Posicionamento na Tela</h3>
-
-              <!-- Preset Buttons -->
-              <div class="grid grid-cols-3 gap-2">
-                <button onclick="setPositionPreset('top-left')" class="p-2 bg-slate-950 hover:bg-slate-800 border border-slate-800 rounded-lg text-xs font-bold text-slate-300 flex flex-col items-center gap-1">
-                  <i data-lucide="align-start-vertical" class="w-4 h-4"></i> Topo Esq.
-                </button>
-                <button onclick="setPositionPreset('top-center')" class="p-2 bg-slate-950 hover:bg-slate-800 border border-slate-800 rounded-lg text-xs font-bold text-slate-300 flex flex-col items-center gap-1">
-                  <i data-lucide="align-center-vertical" class="w-4 h-4"></i> Topo Centro
-                </button>
-                <button onclick="setPositionPreset('top-right')" class="p-2 bg-slate-950 hover:bg-slate-800 border border-slate-800 rounded-lg text-xs font-bold text-slate-300 flex flex-col items-center gap-1">
-                  <i data-lucide="align-end-vertical" class="w-4 h-4"></i> Topo Dir.
-                </button>
-                <button onclick="setPositionPreset('bottom-left')" class="p-2 bg-slate-950 hover:bg-slate-800 border border-slate-800 rounded-lg text-xs font-bold text-slate-300 flex flex-col items-center gap-1">
-                  <i data-lucide="align-start-horizontal" class="w-4 h-4"></i> Base Esq.
-                </button>
-                <button onclick="setPositionPreset('bottom-center')" class="p-2 bg-slate-950 hover:bg-slate-800 border border-slate-800 rounded-lg text-xs font-bold text-slate-300 flex flex-col items-center gap-1">
-                  <i data-lucide="align-center-horizontal" class="w-4 h-4"></i> Base Centro
-                </button>
-                <button onclick="setPositionPreset('bottom-right')" class="p-2 bg-slate-950 hover:bg-slate-800 border border-slate-800 rounded-lg text-xs font-bold text-slate-300 flex flex-col items-center gap-1">
-                  <i data-lucide="align-end-horizontal" class="w-4 h-4"></i> Base Dir.
-                </button>
-              </div>
-
-              <!-- Scale Slider -->
-              <div class="pt-2 border-t border-slate-800">
-                <label class="block text-[11px] font-medium text-slate-400 mb-1">Escala / Tamanho: <span id="val-scale">100%</span></label>
-                <input type="range" id="in-scale" min="50" max="150" value="100" oninput="updateSettings()" class="w-full accent-emerald-500">
-              </div>
-            </div>
-
+          <!-- Botão Reset Geral -->
+          <div class="pt-3 border-t border-slate-700/60 flex justify-end">
+            <button onclick="resetAll()" class="text-xs text-rose-400 hover:text-rose-300 font-bold flex items-center gap-1">
+              <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Zerar Toda a Partida
+            </button>
           </div>
 
         </div>
@@ -488,14 +299,19 @@
       </div>
 
     </div>
+
   </div>
 
+
+  <!-- ============================================================ -->
+  <!-- JAVASCRIPT: LÓGICA E SINCRONIZAÇÃO P2P WEBSOCKET -->
+  <!-- ============================================================ -->
   <script>
-    // Global Application State Schema
+    // --- ESTADO GLOBAL DA APLICAÇÃO ---
     let state = {
-      tournament: "COPA FUTSAL 2026",
+      tournament: "LIGA FUTSAL 2026",
       period: "1º TEMPO",
-      sportMode: "futsal", // futsal | futebol
+      sportMode: "futsal", // futsal ou futebol
       homeName: "TIME A",
       homeScore: 0,
       homeFouls: 0,
@@ -504,21 +320,8 @@
       awayScore: 0,
       awayFouls: 0,
       awayLogo: "https://via.placeholder.com/40?text=B",
-      timerSeconds: 1200,
-      timerRunning: false,
-      
-      // Visual & Customizer Styles
-      bgColor: "#0f172a",
-      borderColor: "#1e293b",
-      teamTextColor: "#ffffff",
-      timerColor: "#fbbf24",
-      fontFamily: "font-teko",
-      borderRadius: 16,
-      bgOpacity: 95,
-      showLogos: true,
-      showBadge: true,
-      scale: 100,
-      position: "top-center" // top-left, top-center, top-right, bottom-left, bottom-center, bottom-right
+      timerSeconds: 1200, // 20m em segundos
+      timerRunning: false
     };
 
     let timerInterval = null;
@@ -526,73 +329,63 @@
     let peerConnection = null;
     let peerId = null;
 
-    // Detect execution mode via URL query params
+    // Detectar modo da URL (?mode=overlay ou padrão controle)
     const urlParams = new URLSearchParams(window.location.search);
     const isOverlayMode = urlParams.get('mode') === 'overlay';
     const targetPeerId = urlParams.get('peer');
 
+    // --- INICIALIZAÇÃO DA PÁGINA ---
     window.addEventListener('DOMContentLoaded', () => {
       lucide.createIcons();
 
       if (isOverlayMode) {
-        // OVERLAY OBS MODE: Hide Dashboard, show transparent canvas
+        // MODO OVERLAY (Exibido dentro do OBS)
         document.getElementById('control-view').classList.add('hidden');
         document.getElementById('overlay-view').classList.remove('hidden');
-        document.body.classList.add('obs-transparent-bg');
+        document.body.classList.add('bg-overlay-transparent');
         initOverlayPeer(targetPeerId);
       } else {
-        // OPERATOR CONTROL DASHBOARD MODE
+        // MODO CONTROLE (Operador no Navegador)
         initControlPeer();
         renderControlUI();
-        renderPreview();
       }
     });
 
-    // --- TAB NAVIGATION IN CUSTOMIZER ---
-    function switchTab(tabId) {
-      document.getElementById('tab-teams').classList.add('hidden');
-      document.getElementById('tab-visuals').classList.add('hidden');
-      document.getElementById('tab-position').classList.add('hidden');
-
-      document.getElementById('tab-btn-teams').className = "flex-1 py-2 text-xs font-bold rounded-xl text-slate-400 hover:text-slate-200 flex items-center justify-center gap-1.5 transition-all";
-      document.getElementById('tab-btn-visuals').className = "flex-1 py-2 text-xs font-bold rounded-xl text-slate-400 hover:text-slate-200 flex items-center justify-center gap-1.5 transition-all";
-      document.getElementById('tab-btn-position').className = "flex-1 py-2 text-xs font-bold rounded-xl text-slate-400 hover:text-slate-200 flex items-center justify-center gap-1.5 transition-all";
-
-      document.getElementById(tabId).classList.remove('hidden');
-      const activeBtn = document.getElementById('tab-btn-' + tabId.replace('tab-', ''));
-      activeBtn.className = "flex-1 py-2 text-xs font-bold rounded-xl bg-slate-800 text-emerald-400 flex items-center justify-center gap-1.5 transition-all";
-    }
-
-    // --- TIMER LOGIC ENGINE ---
+    // --- LÓGICA DO CRONÔMETRO ---
     function toggleTimer() {
       state.timerRunning = !state.timerRunning;
       if (state.timerRunning) {
         timerInterval = setInterval(() => {
           if (state.timerSeconds > 0) {
             state.timerSeconds--;
-            broadcastAndRender();
+            broadcastState();
+            updateTimerDisplays();
           } else {
             state.timerRunning = false;
             clearInterval(timerInterval);
-            broadcastAndRender();
+            broadcastState();
+            updateTimerDisplays();
           }
         }, 1000);
       } else {
         clearInterval(timerInterval);
       }
-      broadcastAndRender();
+      broadcastState();
+      renderControlUI();
     }
 
     function resetTimer() {
       state.timerRunning = false;
       clearInterval(timerInterval);
       state.timerSeconds = state.sportMode === 'futsal' ? 1200 : 2700;
-      broadcastAndRender();
+      broadcastState();
+      renderControlUI();
     }
 
     function adjustTime(seconds) {
       state.timerSeconds = Math.max(0, state.timerSeconds + seconds);
-      broadcastAndRender();
+      broadcastState();
+      updateTimerDisplays();
     }
 
     function setSportMode(mode) {
@@ -610,15 +403,16 @@
         futsalBoxHome.classList.remove('hidden');
         futsalBoxAway.classList.remove('hidden');
         btnFutsal.className = "px-3 py-1 rounded-lg text-xs font-bold bg-emerald-600 text-white";
-        btnFutebol.className = "px-3 py-1 rounded-lg text-xs font-bold text-slate-400 hover:text-white";
+        btnFutebol.className = "px-3 py-1 rounded-lg text-xs font-bold bg-slate-700 text-slate-300 hover:bg-slate-600";
       } else {
         futsalBoxHome.classList.add('hidden');
         futsalBoxAway.classList.add('hidden');
         btnFutebol.className = "px-3 py-1 rounded-lg text-xs font-bold bg-emerald-600 text-white";
-        btnFutsal.className = "px-3 py-1 rounded-lg text-xs font-bold text-slate-400 hover:text-white";
+        btnFutsal.className = "px-3 py-1 rounded-lg text-xs font-bold bg-slate-700 text-slate-300 hover:bg-slate-600";
       }
 
-      broadcastAndRender();
+      broadcastState();
+      renderControlUI();
     }
 
     function nextPeriod() {
@@ -627,72 +421,40 @@
       else state.period = '1º TEMPO';
       
       resetTimer();
+      broadcastState();
+      renderControlUI();
     }
 
-    // --- SCORE & FOULS ---
+    // --- LÓGICA DE GOLS E FALTAS ---
     function updateScore(team, delta) {
       if (team === 'home') state.homeScore = Math.max(0, state.homeScore + delta);
       if (team === 'away') state.awayScore = Math.max(0, state.awayScore + delta);
-      broadcastAndRender();
+      broadcastState();
+      renderControlUI();
     }
 
     function addFoul(team) {
       if (team === 'home') state.homeFouls = Math.min(5, state.homeFouls + 1);
       if (team === 'away') state.awayFouls = Math.min(5, state.awayFouls + 1);
-      broadcastAndRender();
+      broadcastState();
+      renderControlUI();
     }
 
     function resetFouls(team) {
       if (team === 'home') state.homeFouls = 0;
       if (team === 'away') state.awayFouls = 0;
-      broadcastAndRender();
+      broadcastState();
+      renderControlUI();
     }
 
-    // --- CUSTOMIZER SYNC & INPUT READERS ---
     function updateSettings() {
       state.tournament = document.getElementById('in-tournament').value;
       state.homeName = document.getElementById('in-home-name').value;
       state.homeLogo = document.getElementById('in-home-logo').value;
       state.awayName = document.getElementById('in-away-name').value;
       state.awayLogo = document.getElementById('in-away-logo').value;
-
-      state.bgColor = document.getElementById('in-bg-color').value;
-      state.borderColor = document.getElementById('in-border-color').value;
-      state.teamTextColor = document.getElementById('in-team-text-color').value;
-      state.timerColor = document.getElementById('in-timer-color').value;
-      state.fontFamily = document.getElementById('in-font-family').value;
-      
-      state.borderRadius = parseInt(document.getElementById('in-radius').value);
-      state.bgOpacity = parseInt(document.getElementById('in-opacity').value);
-      state.scale = parseInt(document.getElementById('in-scale').value);
-
-      state.showLogos = document.getElementById('toggle-logos').checked;
-      state.showBadge = document.getElementById('toggle-badge').checked;
-
-      // Labels UI
-      document.getElementById('val-radius').innerText = state.borderRadius + 'px';
-      document.getElementById('val-opacity').innerText = state.bgOpacity + '%';
-      document.getElementById('val-scale').innerText = state.scale + '%';
-
-      // Text hex inputs sync
-      document.getElementById('in-bg-color-txt').value = state.bgColor;
-      document.getElementById('in-border-color-txt').value = state.borderColor;
-      document.getElementById('in-team-text-color-txt').value = state.teamTextColor;
-      document.getElementById('in-timer-color-txt').value = state.timerColor;
-
-      broadcastAndRender();
-    }
-
-    function syncColorInput(targetId, hexValue) {
-      if (/^#[0-9A-F]{6}$/i.test(hexValue)) {
-        document.getElementById(targetId).value = hexValue;
-        updateSettings();
-      }
-    }
-
-    function setPositionPreset(pos) {
-      state.position = pos;
-      broadcastAndRender();
+      broadcastState();
+      renderControlUI();
     }
 
     function handleFileUpload(event, team) {
@@ -708,27 +470,42 @@
             state.awayLogo = result;
             document.getElementById('in-away-logo').value = result;
           }
-          broadcastAndRender();
+          broadcastState();
+          renderControlUI();
         };
         reader.readAsDataURL(file);
       }
     }
 
+    function resetAll() {
+      if (confirm("Deseja realmente zerar todo o placar e cronômetro?")) {
+        state.homeScore = 0;
+        state.awayScore = 0;
+        state.homeFouls = 0;
+        state.awayFouls = 0;
+        state.period = "1º TEMPO";
+        resetTimer();
+      }
+    }
+
+    // Formatar segundos em MM:SS
     function formatTime(totalSeconds) {
       const m = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
       const s = (totalSeconds % 60).toString().padStart(2, '0');
       return `${m}:${s}`;
     }
 
-    function broadcastAndRender() {
-      broadcastState();
-      if (!isOverlayMode) {
-        renderControlUI();
-        renderPreview();
+    function updateTimerDisplays() {
+      const timeStr = formatTime(state.timerSeconds);
+      if (isOverlayMode) {
+        document.getElementById('ov-timer').innerText = timeStr;
+        document.getElementById('ov-timer-status').innerText = state.timerRunning ? 'EM JOGO' : 'PAUSADO';
+      } else {
+        document.getElementById('ctrl-timer-display').innerText = timeStr;
       }
     }
 
-    // --- RENDERERS FOR CONTROL UI & PREVIEW ---
+    // --- ATUALIZAÇÃO DA INTERFACE ---
     function renderControlUI() {
       document.getElementById('ctrl-timer-display').innerText = formatTime(state.timerSeconds);
       document.getElementById('ctrl-period-display').innerText = state.period;
@@ -739,141 +516,73 @@
 
       const btnToggle = document.getElementById('btn-timer-toggle');
       if (state.timerRunning) {
-        btnToggle.className = "col-span-2 py-3.5 bg-amber-600 hover:bg-amber-500 text-white font-black text-sm rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-amber-600/20";
+        btnToggle.className = "col-span-2 py-3 bg-amber-600 hover:bg-amber-500 text-white font-black text-sm rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-amber-600/20";
         btnToggle.innerHTML = `<i data-lucide="pause" class="w-5 h-5"></i> PAUSAR TEMPO`;
       } else {
-        btnToggle.className = "col-span-2 py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-sm rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20";
+        btnToggle.className = "col-span-2 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-sm rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20";
         btnToggle.innerHTML = `<i data-lucide="play" class="w-5 h-5"></i> INICIAR TEMPO`;
       }
       lucide.createIcons();
     }
 
-    function renderPreview() {
-      const mount = document.getElementById('prev-mount-wrapper');
-      mount.innerHTML = '';
-      
-      const overlayClone = document.getElementById('ov-position-wrapper').cloneNode(true);
-      overlayClone.id = 'prev-position-wrapper';
-      mount.appendChild(overlayClone);
+    function renderOverlayUI(data) {
+      document.getElementById('ov-tournament').innerText = data.tournament;
+      document.getElementById('ov-period').innerText = data.period;
+      document.getElementById('ov-home-name').innerText = data.homeName;
+      document.getElementById('ov-home-score').innerText = data.homeScore;
+      document.getElementById('ov-home-logo').src = data.homeLogo;
 
-      applyStylesToScoreboard(overlayClone, state);
-    }
+      document.getElementById('ov-away-name').innerText = data.awayName;
+      document.getElementById('ov-away-score').innerText = data.awayScore;
+      document.getElementById('ov-away-logo').src = data.awayLogo;
 
-    // --- CORE SCOREBOARD STYLING ENGINE ---
-    function applyStylesToScoreboard(container, data) {
-      const card = container.querySelector('#ov-scoreboard-card');
-      const badgeBox = container.querySelector('#ov-badge-box');
-      const homeName = container.querySelector('#ov-home-name');
-      const awayName = container.querySelector('#ov-away-name');
-      const homeScore = container.querySelector('#ov-home-score');
-      const awayScore = container.querySelector('#ov-away-score');
-      const timer = container.querySelector('#ov-timer');
-      const homeLogo = container.querySelector('#ov-home-logo');
-      const awayLogo = container.querySelector('#ov-away-logo');
-      const positionWrapper = container.id === 'prev-position-wrapper' ? container : document.getElementById('ov-position-wrapper');
+      document.getElementById('ov-timer').innerText = formatTime(data.timerSeconds);
+      document.getElementById('ov-timer-status').innerText = data.timerRunning ? 'EM JOGO' : 'PAUSADO';
 
-      // Hex to RGBA conversion for bg opacity
-      const hex = data.bgColor.replace('#', '');
-      const r = parseInt(hex.substring(0, 2), 16) || 15;
-      const g = parseInt(hex.substring(2, 4), 16) || 23;
-      const b = parseInt(hex.substring(4, 6), 16) || 42;
-      const rgbaBg = `rgba(${r}, ${g}, ${b}, ${data.bgOpacity / 100})`;
-
-      // Card Base
-      card.style.backgroundColor = rgbaBg;
-      card.style.borderColor = data.borderColor;
-      card.style.borderRadius = `${data.borderRadius}px`;
-      card.style.transform = `scale(${data.scale / 100})`;
-
-      // Font Family class
-      card.className = `relative transition-all duration-200 overflow-hidden border flex items-stretch shadow-2xl glass-panel ${data.fontFamily}`;
-
-      // Content & Colors
-      container.querySelector('#ov-tournament').innerText = data.tournament;
-      container.querySelector('#ov-period').innerText = data.period;
-      homeName.innerText = data.homeName;
-      awayName.innerText = data.awayName;
-      homeScore.innerText = data.homeScore;
-      awayScore.innerText = data.awayScore;
-      timer.innerText = formatTime(data.timerSeconds);
-      container.querySelector('#ov-timer-status').innerText = data.timerRunning ? 'EM JOGO' : 'PAUSADO';
-
-      homeName.style.color = data.teamTextColor;
-      awayName.style.color = data.teamTextColor;
-      homeScore.style.color = data.teamTextColor;
-      awayScore.style.color = data.teamTextColor;
-      timer.style.color = data.timerColor;
-
-      // Logos Toggle
-      homeLogo.src = data.homeLogo;
-      awayLogo.src = data.awayLogo;
-      homeLogo.style.display = data.showLogos ? 'block' : 'none';
-      awayLogo.style.display = data.showLogos ? 'block' : 'none';
-
-      // Badge Box Toggle
-      badgeBox.style.display = data.showBadge ? 'flex' : 'none';
-      badgeBox.style.borderColor = data.borderColor;
-
-      // Futsal Fouls Render
-      const homeDots = container.querySelectorAll('.ov-foul-dot');
+      // Atualizar Faltas Mandante
+      const homeDots = document.querySelectorAll('.ov-foul-dot');
       homeDots.forEach((dot, index) => {
-        dot.style.borderColor = data.borderColor;
-        dot.className = index < data.homeFouls 
-          ? "ov-foul-dot w-2.5 h-2.5 rounded-full bg-rose-500 border shadow-sm shadow-rose-500/50"
-          : "ov-foul-dot w-2.5 h-2.5 rounded-full bg-slate-900/60 border";
-      });
-
-      const awayDots = container.querySelectorAll('.ov-foul-dot-away');
-      awayDots.forEach((dot, index) => {
-        dot.style.borderColor = data.borderColor;
-        dot.className = index < data.awayFouls 
-          ? "ov-foul-dot-away w-2.5 h-2.5 rounded-full bg-rose-500 border shadow-sm shadow-rose-500/50"
-          : "ov-foul-dot-away w-2.5 h-2.5 rounded-full bg-slate-900/60 border";
-      });
-
-      const homeFoulsCont = container.querySelector('#ov-home-fouls-container');
-      const awayFoulsCont = container.querySelector('#ov-away-fouls-container');
-      if (data.sportMode === 'futebol') {
-        homeFoulsCont.style.display = 'none';
-        awayFoulsCont.style.display = 'none';
-      } else {
-        homeFoulsCont.style.display = 'flex';
-        awayFoulsCont.style.display = 'flex';
-      }
-
-      // Position Alignment Wrapper
-      if (positionWrapper) {
-        switch (data.position) {
-          case 'top-left':
-            positionWrapper.className = "absolute inset-0 p-6 flex flex-col pointer-events-none transition-all duration-300 items-start justify-start";
-            break;
-          case 'top-center':
-            positionWrapper.className = "absolute inset-0 p-6 flex flex-col pointer-events-none transition-all duration-300 items-center justify-start";
-            break;
-          case 'top-right':
-            positionWrapper.className = "absolute inset-0 p-6 flex flex-col pointer-events-none transition-all duration-300 items-end justify-start";
-            break;
-          case 'bottom-left':
-            positionWrapper.className = "absolute inset-0 p-6 flex flex-col pointer-events-none transition-all duration-300 items-start justify-end";
-            break;
-          case 'bottom-center':
-            positionWrapper.className = "absolute inset-0 p-6 flex flex-col pointer-events-none transition-all duration-300 items-center justify-end";
-            break;
-          case 'bottom-right':
-            positionWrapper.className = "absolute inset-0 p-6 flex flex-col pointer-events-none transition-all duration-300 items-end justify-end";
-            break;
+        if (index < data.homeFouls) {
+          dot.className = "ov-foul-dot w-2 h-2 rounded-full bg-rose-500 shadow-sm shadow-rose-500/50";
+        } else {
+          dot.className = "ov-foul-dot w-2 h-2 rounded-full bg-slate-700";
         }
+      });
+
+      // Atualizar Faltas Visitante
+      const awayDots = document.querySelectorAll('.ov-foul-dot-away');
+      awayDots.forEach((dot, index) => {
+        if (index < data.awayFouls) {
+          dot.className = "ov-foul-dot-away w-2 h-2 rounded-full bg-rose-500 shadow-sm shadow-rose-500/50";
+        } else {
+          dot.className = "ov-foul-dot-away w-2 h-2 rounded-full bg-slate-700";
+        }
+      });
+
+      // Ocultar faltas se for futebol
+      const homeFoulsCont = document.getElementById('ov-home-fouls-container');
+      const awayFoulsCont = document.getElementById('ov-away-fouls-container');
+      if (data.sportMode === 'futebol') {
+        homeFoulsCont.classList.add('hidden');
+        awayFoulsCont.classList.add('hidden');
+      } else {
+        homeFoulsCont.classList.remove('hidden');
+        awayFoulsCont.classList.remove('hidden');
       }
     }
 
 
-    // --- PEERJS WEBSOCKET REALTIME ENGINE ---
+    // ============================================================
+    // COMUNICAÇÃO EM TEMPO REAL VIA PEERJS (WEBSOCKET/P2P)
+    // ============================================================
+
+    // PAINEL DE CONTROLE (HOST)
     function initControlPeer() {
       peer = new Peer();
 
       peer.on('open', (id) => {
         peerId = id;
-        document.getElementById('peer-status-text').innerText = "Aguardando Conexão...";
+        document.getElementById('peer-status-text').innerText = "Aguardando OBS...";
       });
 
       peer.on('connection', (conn) => {
@@ -883,6 +592,7 @@
         document.getElementById('peer-status-text').innerText = "OBS Conectado!";
         document.getElementById('peer-status-text').className = "text-emerald-400 font-bold";
 
+        // Envia o estado atual assim que o OBS se conecta
         broadcastState();
 
         conn.on('close', () => {
@@ -893,6 +603,7 @@
       });
     }
 
+    // OVERLAY OBS (CLIENTE)
     function initOverlayPeer(targetId) {
       if (!targetId) return;
 
@@ -902,36 +613,38 @@
         const conn = peer.connect(targetId);
 
         conn.on('open', () => {
-          document.getElementById('ov-status-dot').className = "w-2.5 h-2.5 rounded-full bg-emerald-500";
-          document.getElementById('ov-status-text').innerText = "Conectado ao Painel!";
+          document.getElementById('ov-status-dot').className = "w-2 h-2 rounded-full bg-emerald-500";
+          document.getElementById('ov-status-text').innerText = "Conectado ao Painel";
           
+          // Ocultar status após 3 segundos
           setTimeout(() => {
             document.getElementById('ov-status').classList.add('opacity-0', 'transition-opacity', 'duration-500');
           }, 3000);
         });
 
-        conn.on('data', (incomingData) => {
-          state = incomingData;
-          applyStylesToScoreboard(document.getElementById('overlay-view'), state);
+        conn.on('data', (data) => {
+          renderOverlayUI(data);
         });
 
         conn.on('close', () => {
           document.getElementById('ov-status').classList.remove('opacity-0');
-          document.getElementById('ov-status-dot').className = "w-2.5 h-2.5 rounded-full bg-rose-500";
+          document.getElementById('ov-status-dot').className = "w-2 h-2 rounded-full bg-rose-500";
           document.getElementById('ov-status-text').innerText = "Conexão Perdida";
         });
       });
     }
 
+    // Enviar dados em tempo real para o OBS
     function broadcastState() {
       if (peerConnection && peerConnection.open) {
         peerConnection.send(state);
       }
     }
 
+    // Copiar URL configurada com ID P2P para o OBS
     function copyOBSLink() {
       if (!peerId) {
-        alert("Aguarde a conexão inicial por alguns instantes...");
+        alert("Aguarde a inicialização da conexão por alguns segundos...");
         return;
       }
 
@@ -939,9 +652,9 @@
       const obsUrl = `${baseUrl}?mode=overlay&peer=${peerId}`;
 
       navigator.clipboard.writeText(obsUrl).then(() => {
-        alert("Link gerado e copiado com sucesso!\n\nCole este link na Fonte de Navegador (Browser Source) do OBS Studio:\n" + obsUrl);
+        alert("Link copiado! Cole esse link na Fonte de Navegador (Browser Source) do OBS Studio:\n\n" + obsUrl);
       }).catch(err => {
-        prompt("Copie este link para a fonte do OBS Studio:", obsUrl);
+        prompt("Copie o link abaixo para o OBS Studio:", obsUrl);
       });
     }
   </script>
