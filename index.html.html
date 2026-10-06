@@ -1,0 +1,949 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Placar Live Studio - Overlays de Futebol & Futsal</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Teko:wght@600;700&family=Montserrat:wght@400;600;800;900&family=Oswald:wght@500;700&display=swap" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        dark: {
+                            900: '#0d1117',
+                            800: '#161b22',
+                            700: '#21262d',
+                            600: '#30363d',
+                        },
+                        brand: {
+                            500: '#238636',
+                            600: '#2ea043',
+                            accent: '#58a6ff'
+                        }
+                    },
+                    fontFamily: {
+                        teko: ['Teko', 'sans-serif'],
+                        montserrat: ['Montserrat', 'sans-serif'],
+                        oswald: ['Oswald', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Custom Styles for Transparent Overlay Support */
+        body.is-overlay {
+            background-color: transparent !important;
+            background: none !important;
+            overflow: hidden;
+        }
+
+        /* Animated Pulse for Live Recording */
+        @keyframes pulse-red {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+        .animate-live {
+            animation: pulse-red 1.5s infinite;
+        }
+
+        /* Text Stroke Effects for Sports Broadcasts */
+        .text-stroke-sm {
+            -webkit-text-stroke: 1px rgba(0,0,0,0.8);
+        }
+        .text-stroke-md {
+            -webkit-text-stroke: 1.5px rgba(0,0,0,0.9);
+        }
+
+        /* Broadcast Scoreboard Specific Animations */
+        .score-anim {
+            transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .score-pop {
+            transform: scale(1.3);
+        }
+
+        /* Custom Scrollbars for Dark UI */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #161b22;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #30363d;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #484f58;
+        }
+    </style>
+</head>
+<body class="bg-dark-900 text-gray-100 font-montserrat min-h-screen antialiased">
+
+    <!-- NAVIGATION BAR (Visible only in Control Mode) -->
+    <nav id="appHeader" class="bg-dark-800 border-b border-dark-600 px-4 py-3 flex flex-wrap justify-between items-center gap-4 sticky top-0 z-50 shadow-md">
+        <div class="flex items-center space-x-3">
+            <div class="bg-brand-500 text-white p-2 rounded-lg flex items-center justify-center font-bold text-xl">
+                <i class="fa-solid fa-tv"></i>
+            </div>
+            <div>
+                <h1 class="text-lg font-bold tracking-wide text-white leading-none">Placar Live Studio</h1>
+                <p class="text-xs text-gray-400">Overlay Transparente para OBS / vMix</p>
+            </div>
+        </div>
+
+        <!-- Mode Indicator / Quick Actions -->
+        <div class="flex items-center gap-2">
+            <button onclick="setSportPreset('futsal')" class="bg-dark-700 hover:bg-dark-600 text-xs text-gray-200 px-3 py-1.5 rounded-lg border border-dark-600 flex items-center gap-1.5 transition">
+                <i class="fa-solid fa-futbol text-emerald-400"></i> Preset: Futsal
+            </button>
+            <button onclick="setSportPreset('futebol')" class="bg-dark-700 hover:bg-dark-600 text-xs text-gray-200 px-3 py-1.5 rounded-lg border border-dark-600 flex items-center gap-1.5 transition">
+                <i class="fa-solid fa-[#00ff88] fa-soccer-ball text-blue-400"></i> Preset: Futebol
+            </button>
+            <button onclick="openOverlayWindow()" class="bg-brand-500 hover:bg-brand-600 text-white font-semibold text-xs px-3.5 py-1.5 rounded-lg shadow-lg flex items-center gap-2 transition">
+                <i class="fa-solid fa-arrow-up-right-from-square"></i> Abrir Overlay OBS
+            </button>
+            <button onclick="copyOverlayUrl()" class="bg-dark-700 hover:bg-dark-600 text-xs text-gray-200 px-3 py-1.5 rounded-lg border border-dark-600 flex items-center gap-1.5 transition" title="Copiar Link para OBS">
+                <i class="fa-solid fa-link"></i> Copiar Link
+            </button>
+        </div>
+    </nav>
+
+    <!-- MAIN CONTAINER -->
+    <div id="mainContainer" class="p-4 lg:p-6 max-w-[1600px] mx-auto">
+        
+        <!-- CONTROL PANEL & PREVIEW WRAPPER -->
+        <div id="controlPanelWrapper" class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            <!-- LIVE PREVIEW SECTION (Top or Side sticky preview) -->
+            <div class="lg:col-span-12">
+                <div class="bg-dark-800 rounded-xl border border-dark-600 p-4 shadow-xl">
+                    <div class="flex justify-between items-center mb-3">
+                        <span class="text-xs font-semibold uppercase tracking-wider text-gray-400 flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-red-500 animate-live"></span>
+                            Pré-Visualização do Overlay em Tempo Real
+                        </span>
+                        <div class="text-xs text-gray-400 flex items-center gap-4">
+                            <span><i class="fa-solid fa-eye text-gray-500"></i> O fundo azul/xadrez abaixo fica <strong>100% transparente</strong> no OBS</span>
+                        </div>
+                    </div>
+
+                    <!-- PREVIEW CANVAS BOX (Emulates video stream background) -->
+                    <div class="relative w-full h-[220px] md:h-[260px] bg-slate-950 rounded-lg overflow-hidden border border-dark-700 flex items-center justify-center bg-[radial-gradient(#1e293b_1px,transparent_1px)] [background-size:16px_16px]">
+                        <!-- Pitch lines graphic background simulation -->
+                        <div class="absolute inset-0 opacity-10 pointer-events-none flex items-center justify-center">
+                            <div class="w-48 h-48 border-2 border-white rounded-full flex items-center justify-center">
+                                <div class="w-full border-b border-white"></div>
+                            </div>
+                        </div>
+
+                        <!-- LIVE OVERLAY MOUNT CONTAINER (Control Panel Embed) -->
+                        <div id="previewMount" class="w-full h-full relative flex items-center justify-center p-4">
+                            <!-- Scoreboard render target -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- LEFT COLUMN: QUICK CONTROLS (Score, Timer, Match Events) -->
+            <div class="lg:col-span-7 space-y-6">
+
+                <!-- MAIN SCORE & MATCH TIMING CONTROL CARD -->
+                <div class="bg-dark-800 rounded-xl border border-dark-600 p-5 shadow-lg">
+                    <h2 class="text-sm font-bold text-gray-300 uppercase tracking-wider mb-4 border-b border-dark-700 pb-2 flex items-center gap-2">
+                        <i class="fa-solid fa-gamepad text-brand-accent"></i> Controle do Placar e Cronômetro
+                    </h2>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        
+                        <!-- TEAM A CONTROLLER -->
+                        <div class="bg-dark-900/60 p-4 rounded-xl border border-dark-700 flex flex-col justify-between">
+                            <div>
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="text-xs font-bold text-gray-400 uppercase">Time A (Mandante)</span>
+                                    <div class="w-4 h-4 rounded-full border border-white/20" id="teamAColorBadge"></div>
+                                </div>
+                                <h3 id="ctrlTeamAName" class="text-lg font-bold text-white truncate mb-1">Time A</h3>
+                            </div>
+
+                            <div class="my-4 flex items-center justify-center gap-3">
+                                <button onclick="updateScore('A', -1)" class="w-10 h-12 bg-dark-700 hover:bg-dark-600 text-white rounded-lg font-bold text-xl transition flex items-center justify-center shadow">-</button>
+                                <span id="ctrlScoreA" class="text-5xl font-black text-white font-teko min-w-[60px] text-center bg-dark-800 py-1 px-3 rounded-lg border border-dark-600">0</span>
+                                <button onclick="updateScore('A', 1)" class="w-12 h-12 bg-brand-500 hover:bg-brand-600 text-white rounded-lg font-bold text-2xl transition flex items-center justify-center shadow-lg">+1</button>
+                            </div>
+
+                            <!-- Futsal Fouls / Timeouts Team A -->
+                            <div class="space-y-2 pt-2 border-t border-dark-700/50">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-xs text-gray-400">Faltas Acumuladas:</span>
+                                    <div class="flex items-center gap-1.5">
+                                        <button onclick="updateFouls('A', -1)" class="w-6 h-6 bg-dark-700 hover:bg-dark-600 text-xs rounded text-gray-300">-</button>
+                                        <span id="ctrlFoulsA" class="text-sm font-bold text-amber-400 min-w-[20px] text-center">0</span>
+                                        <button onclick="updateFouls('A', 1)" class="w-6 h-6 bg-dark-700 hover:bg-dark-600 text-xs rounded text-gray-300">+</button>
+                                    </div>
+                                </div>
+                                <div class="flex items-center justify-between">
+                                    <span class="text-xs text-gray-400">Pedido de Tempo:</span>
+                                    <button onclick="toggleTimeout('A')" id="ctrlTimeoutBtnA" class="px-2.5 py-1 text-xs bg-dark-700 hover:bg-dark-600 text-gray-300 rounded border border-dark-600 transition">
+                                        Pedir Tempo
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- TEAM B CONTROLLER -->
+                        <div class="bg-dark-900/60 p-4 rounded-xl border border-dark-700 flex flex-col justify-between">
+                            <div>
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="text-xs font-bold text-gray-400 uppercase">Time B (Visitante)</span>
+                                    <div class="w-4 h-4 rounded-full border border-white/20" id="teamBColorBadge"></div>
+                                </div>
+                                <h3 id="ctrlTeamBName" class="text-lg font-bold text-white truncate mb-1">Time B</h3>
+                            </div>
+
+                            <div class="my-4 flex items-center justify-center gap-3">
+                                <button onclick="updateScore('B', -1)" class="w-10 h-12 bg-dark-700 hover:bg-dark-600 text-white rounded-lg font-bold text-xl transition flex items-center justify-center shadow">-</button>
+                                <span id="ctrlScoreB" class="text-5xl font-black text-white font-teko min-w-[60px] text-center bg-dark-800 py-1 px-3 rounded-lg border border-dark-600">0</span>
+                                <button onclick="updateScore('B', 1)" class="w-12 h-12 bg-brand-500 hover:bg-brand-600 text-white rounded-lg font-bold text-2xl transition flex items-center justify-center shadow-lg">+1</button>
+                            </div>
+
+                            <!-- Futsal Fouls / Timeouts Team B -->
+                            <div class="space-y-2 pt-2 border-t border-dark-700/50">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-xs text-gray-400">Faltas Acumuladas:</span>
+                                    <div class="flex items-center gap-1.5">
+                                        <button onclick="updateFouls('B', -1)" class="w-6 h-6 bg-dark-700 hover:bg-dark-600 text-xs rounded text-gray-300">-</button>
+                                        <span id="ctrlFoulsB" class="text-sm font-bold text-amber-400 min-w-[20px] text-center">0</span>
+                                        <button onclick="updateFouls('B', 1)" class="w-6 h-6 bg-dark-700 hover:bg-dark-600 text-xs rounded text-gray-300">+</button>
+                                    </div>
+                                </div>
+                                <div class="flex items-center justify-between">
+                                    <span class="text-xs text-gray-400">Pedido de Tempo:</span>
+                                    <button onclick="toggleTimeout('B')" id="ctrlTimeoutBtnB" class="px-2.5 py-1 text-xs bg-dark-700 hover:bg-dark-600 text-gray-300 rounded border border-dark-600 transition">
+                                        Pedir Tempo
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <!-- CLOCK & PERIOD CONTROL -->
+                    <div class="mt-6 p-4 bg-dark-900 rounded-xl border border-dark-700">
+                        <div class="flex flex-wrap items-center justify-between gap-4 mb-4">
+                            <div>
+                                <span class="text-xs text-gray-400 block mb-1">Status / Etapa do Jogo</span>
+                                <select id="ctrlPeriod" onchange="updatePeriod(this.value)" class="bg-dark-800 border border-dark-600 text-white text-xs rounded-lg p-2 focus:ring-1 focus:ring-brand-accent">
+                                    <option value="1º TEMPO">1º Tempo</option>
+                                    <option value="INTERVALO">Intervalo</option>
+                                    <option value="2º TEMPO">2º Tempo</option>
+                                    <option value="PRORROGAÇÃO">Prorrogação</option>
+                                    <option value="PÊNALTIS">Pênaltis</option>
+                                    <option value="FINAL">Fim de Jogo</option>
+                                </select>
+                            </div>
+
+                            <div class="text-center">
+                                <span class="text-xs text-gray-400 block mb-1">Cronômetro</span>
+                                <div id="ctrlTimerDisplay" class="font-teko text-4xl font-bold tracking-widest text-emerald-400 bg-black/40 px-4 py-0.5 rounded border border-dark-700">
+                                    00:00
+                                </div>
+                            </div>
+
+                            <div class="flex items-center gap-2">
+                                <button id="ctrlTimerStartBtn" onclick="toggleTimer()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-4 py-2 rounded-lg text-sm transition flex items-center gap-2 shadow">
+                                    <i class="fa-solid fa-play"></i> Iniciar
+                                </button>
+                                <button onclick="resetTimer()" class="bg-dark-700 hover:bg-dark-600 text-gray-200 px-3 py-2 rounded-lg text-sm border border-dark-600 transition" title="Reiniciar">
+                                    <i class="fa-solid fa-rotate-right"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Quick Timer Adjustment Controls -->
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-2 pt-3 border-t border-dark-800">
+                            <button onclick="adjustTimerSeconds(60)" class="bg-dark-800 hover:bg-dark-700 text-xs py-1.5 rounded text-gray-300 border border-dark-700">+1 Minuto</button>
+                            <button onclick="adjustTimerSeconds(-60)" class="bg-dark-800 hover:bg-dark-700 text-xs py-1.5 rounded text-gray-300 border border-dark-700">-1 Minuto</button>
+                            <button onclick="setTimerDirect(20, 0)" class="bg-dark-800 hover:bg-dark-700 text-xs py-1.5 rounded text-gray-300 border border-dark-700">Set 20:00 (Futsal)</button>
+                            <button onclick="setTimerDirect(45, 0)" class="bg-dark-800 hover:bg-dark-700 text-xs py-1.5 rounded text-gray-300 border border-dark-700">Set 45:00 (Futebol)</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- QUICK VISIBILITY TOGGLES CARD -->
+                <div class="bg-dark-800 rounded-xl border border-dark-600 p-5 shadow-lg">
+                    <h2 class="text-sm font-bold text-gray-300 uppercase tracking-wider mb-4 border-b border-dark-700 pb-2 flex items-center gap-2">
+                        <i class="fa-solid fa-eye text-brand-accent"></i> Visibilidade de Elementos no Overlay
+                    </h2>
+
+                    <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                        <label class="flex items-center gap-2.5 p-2 bg-dark-900/60 rounded-lg border border-dark-700 cursor-pointer hover:bg-dark-900">
+                            <input type="checkbox" id="toggleShowLogos" checked onchange="updateVisibility()" class="rounded bg-dark-800 border-dark-600 text-brand-500 focus:ring-0">
+                            <span class="text-xs text-gray-300 font-medium">Escudos/Logos</span>
+                        </label>
+                        <label class="flex items-center gap-2.5 p-2 bg-dark-900/60 rounded-lg border border-dark-700 cursor-pointer hover:bg-dark-900">
+                            <input type="checkbox" id="toggleShowFouls" checked onchange="updateVisibility()" class="rounded bg-dark-800 border-dark-600 text-brand-500 focus:ring-0">
+                            <span class="text-xs text-gray-300 font-medium">Faltas Acumuladas</span>
+                        </label>
+                        <label class="flex items-center gap-2.5 p-2 bg-dark-900/60 rounded-lg border border-dark-700 cursor-pointer hover:bg-dark-900">
+                            <input type="checkbox" id="toggleShowTimer" checked onchange="updateVisibility()" class="rounded bg-dark-800 border-dark-600 text-brand-500 focus:ring-0">
+                            <span class="text-xs text-gray-300 font-medium">Cronômetro/Tempo</span>
+                        </label>
+                        <label class="flex items-center gap-2.5 p-2 bg-dark-900/60 rounded-lg border border-dark-700 cursor-pointer hover:bg-dark-900">
+                            <input type="checkbox" id="toggleShowPeriod" checked onchange="updateVisibility()" class="rounded bg-dark-800 border-dark-600 text-brand-500 focus:ring-0">
+                            <span class="text-xs text-gray-300 font-medium">Nome da Etapa</span>
+                        </label>
+                        <label class="flex items-center gap-2.5 p-2 bg-dark-900/60 rounded-lg border border-dark-700 cursor-pointer hover:bg-dark-900">
+                            <input type="checkbox" id="toggleShowTournament" checked onchange="updateVisibility()" class="rounded bg-dark-800 border-dark-600 text-brand-500 focus:ring-0">
+                            <span class="text-xs text-gray-300 font-medium">Nome do Torneio</span>
+                        </label>
+                        <label class="flex items-center gap-2.5 p-2 bg-dark-900/60 rounded-lg border border-dark-700 cursor-pointer hover:bg-dark-900">
+                            <input type="checkbox" id="toggleShowScoreboard" checked onchange="updateVisibility()" class="rounded bg-dark-800 border-dark-600 text-brand-500 focus:ring-0">
+                            <span class="text-xs text-gray-300 font-medium">Mostrar Placar</span>
+                        </label>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- RIGHT COLUMN: TEAMS & CUSTOMIZATION SETTINGS -->
+            <div class="lg:col-span-5 space-y-6">
+
+                <!-- TEAMS CONFIGURATION CARD -->
+                <div class="bg-dark-800 rounded-xl border border-dark-600 p-5 shadow-lg">
+                    <h2 class="text-sm font-bold text-gray-300 uppercase tracking-wider mb-4 border-b border-dark-700 pb-2 flex items-center gap-2">
+                        <i class="fa-solid fa-shirt text-brand-accent"></i> Edição dos Times e Cores
+                    </h2>
+
+                    <!-- TEAM A SETTINGS -->
+                    <div class="space-y-3 mb-6 pb-5 border-b border-dark-700">
+                        <span class="text-xs font-bold text-emerald-400 uppercase tracking-wider block">Mandante (Time A)</span>
+                        <div>
+                            <label class="text-xs text-gray-400 block mb-1">Nome do Time / Sigla</label>
+                            <input type="text" id="inpTeamAName" value="FLAMENGO" oninput="saveSettings()" class="w-full bg-dark-900 border border-dark-600 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-brand-accent">
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="text-xs text-gray-400 block mb-1">Cor Principal</label>
+                                <div class="flex items-center gap-2">
+                                    <input type="color" id="inpTeamAColor" value="#cc0000" onchange="saveSettings()" class="w-10 h-9 bg-transparent rounded cursor-pointer border border-dark-600">
+                                    <input type="text" id="inpTeamAColorTxt" value="#cc0000" oninput="syncColorInput('inpTeamAColor', this.value)" class="w-full bg-dark-900 border border-dark-600 rounded-lg p-1.5 text-xs text-white uppercase">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="text-xs text-gray-400 block mb-1">Cor do Texto</label>
+                                <div class="flex items-center gap-2">
+                                    <input type="color" id="inpTeamATextColor" value="#ffffff" onchange="saveSettings()" class="w-10 h-9 bg-transparent rounded cursor-pointer border border-dark-600">
+                                    <input type="text" id="inpTeamATextColorTxt" value="#ffffff" oninput="syncColorInput('inpTeamATextColor', this.value)" class="w-full bg-dark-900 border border-dark-600 rounded-lg p-1.5 text-xs text-white uppercase">
+                                </div>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-400 block mb-1">Escudo / Logo (URL ou Arquivo)</label>
+                            <div class="flex gap-2">
+                                <input type="text" id="inpTeamALogo" placeholder="https://..." oninput="saveSettings()" class="w-full bg-dark-900 border border-dark-600 rounded-lg p-2 text-xs text-white">
+                                <label class="bg-dark-700 hover:bg-dark-600 text-xs text-gray-200 px-3 py-2 rounded-lg cursor-pointer border border-dark-600 flex items-center justify-center">
+                                    <i class="fa-solid fa-upload"></i>
+                                    <input type="file" accept="image/*" onchange="handleLogoUpload(event, 'inpTeamALogo')" class="hidden">
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- TEAM B SETTINGS -->
+                    <div class="space-y-3">
+                        <span class="text-xs font-bold text-blue-400 uppercase tracking-wider block">Visitante (Time B)</span>
+                        <div>
+                            <label class="text-xs text-gray-400 block mb-1">Nome do Time / Sigla</label>
+                            <input type="text" id="inpTeamBName" value="PALMEIRAS" oninput="saveSettings()" class="w-full bg-dark-900 border border-dark-600 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-brand-accent">
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="text-xs text-gray-400 block mb-1">Cor Principal</label>
+                                <div class="flex items-center gap-2">
+                                    <input type="color" id="inpTeamBColor" value="#006437" onchange="saveSettings()" class="w-10 h-9 bg-transparent rounded cursor-pointer border border-dark-600">
+                                    <input type="text" id="inpTeamBColorTxt" value="#006437" oninput="syncColorInput('inpTeamBColor', this.value)" class="w-full bg-dark-900 border border-dark-600 rounded-lg p-1.5 text-xs text-white uppercase">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="text-xs text-gray-400 block mb-1">Cor do Texto</label>
+                                <div class="flex items-center gap-2">
+                                    <input type="color" id="inpTeamBTextColor" value="#ffffff" onchange="saveSettings()" class="w-10 h-9 bg-transparent rounded cursor-pointer border border-dark-600">
+                                    <input type="text" id="inpTeamBTextColorTxt" value="#ffffff" oninput="syncColorInput('inpTeamBTextColor', this.value)" class="w-full bg-dark-900 border border-dark-600 rounded-lg p-1.5 text-xs text-white uppercase">
+                                </div>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-400 block mb-1">Escudo / Logo (URL ou Arquivo)</label>
+                            <div class="flex gap-2">
+                                <input type="text" id="inpTeamBLogo" placeholder="https://..." oninput="saveSettings()" class="w-full bg-dark-900 border border-dark-600 rounded-lg p-2 text-xs text-white">
+                                <label class="bg-dark-700 hover:bg-dark-600 text-xs text-gray-200 px-3 py-2 rounded-lg cursor-pointer border border-dark-600 flex items-center justify-center">
+                                    <i class="fa-solid fa-upload"></i>
+                                    <input type="file" accept="image/*" onchange="handleLogoUpload(event, 'inpTeamBLogo')" class="hidden">
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- OVERLAY STYLE & DESIGN CUSTOMIZATION CARD -->
+                <div class="bg-dark-800 rounded-xl border border-dark-600 p-5 shadow-lg">
+                    <h2 class="text-sm font-bold text-gray-300 uppercase tracking-wider mb-4 border-b border-dark-700 pb-2 flex items-center gap-2">
+                        <i class="fa-solid fa-palette text-brand-accent"></i> Estilo & Customização do Placar
+                    </h2>
+
+                    <div class="space-y-4">
+                        <div>
+                            <label class="text-xs text-gray-400 block mb-1">Modelo / Layout do Overlay</label>
+                            <select id="inpOverlayStyle" onchange="saveSettings()" class="w-full bg-dark-900 border border-dark-600 text-white text-xs rounded-lg p-2.5 focus:ring-1 focus:ring-brand-accent">
+                                <option value="tv-modern">TV Broadcast Esportes (Topo com detalhes)</option>
+                                <option value="minimal-top">Barra Superior Minimalista</option>
+                                <option value="bottom-bar">Barra Inferior Estilo Premier</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="text-xs text-gray-400 block mb-1">Título do Torneio / Campeonato</label>
+                            <input type="text" id="inpTournament" value="COPA DOS CAMPEÕES 2026" oninput="saveSettings()" class="w-full bg-dark-900 border border-dark-600 rounded-lg p-2 text-xs text-white">
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="text-xs text-gray-400 block mb-1">Fonte dos Textos</label>
+                                <select id="inpFontFamily" onchange="saveSettings()" class="w-full bg-dark-900 border border-dark-600 text-white text-xs rounded-lg p-2">
+                                    <option value="Montserrat">Montserrat</option>
+                                    <option value="Oswald">Oswald</option>
+                                    <option value="Teko">Teko</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="text-xs text-gray-400 block mb-1">Escala / Tamanho</label>
+                                <select id="inpScale" onchange="saveSettings()" class="w-full bg-dark-900 border border-dark-600 text-white text-xs rounded-lg p-2">
+                                    <option value="0.8">Pequeno (80%)</option>
+                                    <option value="1" selected>Padrão (100%)</option>
+                                    <option value="1.2">Grande (120%)</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+    </div>
+
+    <!-- OVERLAY OUTPUT WRAPPER (Rendered both in preview and in standalone OBS view) -->
+    <div id="standaloneOverlayContainer" class="hidden">
+        <!-- Render target for Standalone Overlay Route -->
+    </div>
+
+    <!-- SCRIPT LOGIC -->
+    <script>
+        // Default State Schema
+        const defaultState = {
+            teamA: {
+                name: 'FLAMENGO',
+                score: 0,
+                fouls: 0,
+                color: '#cc0000',
+                textColor: '#ffffff',
+                logo: '',
+                timeout: false
+            },
+            teamB: {
+                name: 'PALMEIRAS',
+                score: 0,
+                fouls: 0,
+                color: '#006437',
+                textColor: '#ffffff',
+                logo: '',
+                timeout: false
+            },
+            timer: {
+                seconds: 0,
+                running: false,
+                period: '1º TEMPO'
+            },
+            settings: {
+                tournament: 'COPA DOS CAMPEÕES 2026',
+                style: 'tv-modern', // tv-modern, minimal-top, bottom-bar
+                fontFamily: 'Montserrat',
+                scale: 1,
+                showLogos: true,
+                showFouls: true,
+                showTimer: true,
+                showPeriod: true,
+                showTournament: true,
+                showScoreboard: true
+            }
+        };
+
+        let appState = JSON.parse(localStorage.getItem('placar_live_state')) || defaultState;
+        let timerInterval = null;
+
+        // BroadcastChannel for instant cross-tab sync (OBS Browser Source Sync)
+        const broadcast = new BroadcastChannel('placar_live_channel');
+
+        // Check if running in Standalone Overlay Mode (URL parameter ?mode=overlay)
+        const urlParams = new URLSearchParams(window.location.search);
+        const isOverlayMode = urlParams.get('mode') === 'overlay';
+
+        window.addEventListener('DOMContentLoaded', () => {
+            if (isOverlayMode) {
+                // Setup standalone OBS Overlay mode
+                document.body.classList.add('is-overlay');
+                document.getElementById('appHeader').style.display = 'none';
+                document.getElementById('mainContainer').style.display = 'none';
+                const overlayContainer = document.getElementById('standaloneOverlayContainer');
+                overlayContainer.classList.remove('hidden');
+                overlayContainer.classList.add('w-screen', 'h-screen', 'flex', 'items-start', 'justify-start', 'p-6');
+                
+                renderOverlay(overlayContainer);
+            } else {
+                // Control Panel Mode setup
+                syncInputsFromState();
+                updateControlUI();
+                renderOverlay(document.getElementById('previewMount'));
+                
+                // Start timer sync loop if running
+                if (appState.timer.running) {
+                    startTimerLoop();
+                }
+            }
+        });
+
+        // Listen for realtime broadcasts from Control Panel -> OBS Overlay
+        broadcast.onmessage = (event) => {
+            appState = event.data;
+            if (isOverlayMode) {
+                renderOverlay(document.getElementById('standaloneOverlayContainer'));
+            } else {
+                updateControlUI();
+                renderOverlay(document.getElementById('previewMount'));
+            }
+        };
+
+        // Fallback sync via Storage event for older browser compatibility
+        window.addEventListener('storage', (e) => {
+            if (e.key === 'placar_live_state') {
+                appState = JSON.parse(e.newValue);
+                if (isOverlayMode) {
+                    renderOverlay(document.getElementById('standaloneOverlayContainer'));
+                } else {
+                    updateControlUI();
+                    renderOverlay(document.getElementById('previewMount'));
+                }
+            }
+        });
+
+        function saveAndBroadcast() {
+            localStorage.setItem('placar_live_state', JSON.stringify(appState));
+            broadcast.postMessage(appState);
+            renderOverlay(isOverlayMode ? document.getElementById('standaloneOverlayContainer') : document.getElementById('previewMount'));
+        }
+
+        function syncInputsFromState() {
+            document.getElementById('inpTeamAName').value = appState.teamA.name;
+            document.getElementById('inpTeamAColor').value = appState.teamA.color;
+            document.getElementById('inpTeamAColorTxt').value = appState.teamA.color;
+            document.getElementById('inpTeamATextColor').value = appState.teamA.textColor;
+            document.getElementById('inpTeamATextColorTxt').value = appState.teamA.textColor;
+            document.getElementById('inpTeamALogo').value = appState.teamA.logo || '';
+
+            document.getElementById('inpTeamBName').value = appState.teamB.name;
+            document.getElementById('inpTeamBColor').value = appState.teamB.color;
+            document.getElementById('inpTeamBColorTxt').value = appState.teamB.color;
+            document.getElementById('inpTeamBTextColor').value = appState.teamB.textColor;
+            document.getElementById('inpTeamBTextColorTxt').value = appState.teamB.textColor;
+            document.getElementById('inpTeamBLogo').value = appState.teamB.logo || '';
+
+            document.getElementById('inpTournament').value = appState.settings.tournament;
+            document.getElementById('inpOverlayStyle').value = appState.settings.style;
+            document.getElementById('inpFontFamily').value = appState.settings.fontFamily;
+            document.getElementById('inpScale').value = appState.settings.scale;
+
+            document.getElementById('toggleShowLogos').checked = appState.settings.showLogos;
+            document.getElementById('toggleShowFouls').checked = appState.settings.showFouls;
+            document.getElementById('toggleShowTimer').checked = appState.settings.showTimer;
+            document.getElementById('toggleShowPeriod').checked = appState.settings.showPeriod;
+            document.getElementById('toggleShowTournament').checked = appState.settings.showTournament;
+            document.getElementById('toggleShowScoreboard').checked = appState.settings.showScoreboard;
+
+            document.getElementById('ctrlPeriod').value = appState.timer.period;
+        }
+
+        function updateControlUI() {
+            document.getElementById('ctrlTeamAName').innerText = appState.teamA.name;
+            document.getElementById('ctrlScoreA').innerText = appState.teamA.score;
+            document.getElementById('ctrlFoulsA').innerText = appState.teamA.fouls;
+            document.getElementById('teamAColorBadge').style.backgroundColor = appState.teamA.color;
+
+            document.getElementById('ctrlTeamBName').innerText = appState.teamB.name;
+            document.getElementById('ctrlScoreB').innerText = appState.teamB.score;
+            document.getElementById('ctrlFoulsB').innerText = appState.teamB.fouls;
+            document.getElementById('teamBColorBadge').style.backgroundColor = appState.teamB.color;
+
+            // Timeout buttons toggle style
+            const btnTimeoutA = document.getElementById('ctrlTimeoutBtnA');
+            btnTimeoutA.className = appState.teamA.timeout 
+                ? 'px-2.5 py-1 text-xs bg-amber-500 font-bold text-black rounded transition animate-pulse'
+                : 'px-2.5 py-1 text-xs bg-dark-700 hover:bg-dark-600 text-gray-300 rounded border border-dark-600 transition';
+
+            const btnTimeoutB = document.getElementById('ctrlTimeoutBtnB');
+            btnTimeoutB.className = appState.teamB.timeout 
+                ? 'px-2.5 py-1 text-xs bg-amber-500 font-bold text-black rounded transition animate-pulse'
+                : 'px-2.5 py-1 text-xs bg-dark-700 hover:bg-dark-600 text-gray-300 rounded border border-dark-600 transition';
+
+            // Timer display update
+            document.getElementById('ctrlTimerDisplay').innerText = formatTime(appState.timer.seconds);
+
+            const startBtn = document.getElementById('ctrlTimerStartBtn');
+            if (appState.timer.running) {
+                startBtn.innerHTML = `<i class="fa-solid fa-pause"></i> Pausar`;
+                startBtn.className = `bg-amber-600 hover:bg-amber-500 text-white font-bold px-4 py-2 rounded-lg text-sm transition flex items-center gap-2 shadow`;
+            } else {
+                startBtn.innerHTML = `<i class="fa-solid fa-play"></i> Iniciar`;
+                startBtn.className = `bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-4 py-2 rounded-lg text-sm transition flex items-center gap-2 shadow`;
+            }
+        }
+
+        function updateScore(team, delta) {
+            if (team === 'A') {
+                appState.teamA.score = Math.max(0, appState.teamA.score + delta);
+            } else {
+                appState.teamB.score = Math.max(0, appState.teamB.score + delta);
+            }
+            updateControlUI();
+            saveAndBroadcast();
+        }
+
+        function updateFouls(team, delta) {
+            if (team === 'A') {
+                appState.teamA.fouls = Math.max(0, appState.teamA.fouls + delta);
+            } else {
+                appState.teamB.fouls = Math.max(0, appState.teamB.fouls + delta);
+            }
+            updateControlUI();
+            saveAndBroadcast();
+        }
+
+        function toggleTimeout(team) {
+            if (team === 'A') {
+                appState.teamA.timeout = !appState.teamA.timeout;
+            } else {
+                appState.teamB.timeout = !appState.teamB.timeout;
+            }
+            updateControlUI();
+            saveAndBroadcast();
+        }
+
+        function toggleTimer() {
+            appState.timer.running = !appState.timer.running;
+            if (appState.timer.running) {
+                startTimerLoop();
+            } else {
+                clearInterval(timerInterval);
+            }
+            updateControlUI();
+            saveAndBroadcast();
+        }
+
+        function startTimerLoop() {
+            clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                if (appState.timer.running) {
+                    appState.timer.seconds++;
+                    updateControlUI();
+                    saveAndBroadcast();
+                }
+            }, 1000);
+        }
+
+        function resetTimer() {
+            appState.timer.seconds = 0;
+            appState.timer.running = false;
+            clearInterval(timerInterval);
+            updateControlUI();
+            saveAndBroadcast();
+        }
+
+        function adjustTimerSeconds(delta) {
+            appState.timer.seconds = Math.max(0, appState.timer.seconds + delta);
+            updateControlUI();
+            saveAndBroadcast();
+        }
+
+        function setTimerDirect(minutes, seconds) {
+            appState.timer.seconds = (minutes * 60) + seconds;
+            updateControlUI();
+            saveAndBroadcast();
+        }
+
+        function updatePeriod(val) {
+            appState.timer.period = val;
+            saveAndBroadcast();
+        }
+
+        function syncColorInput(targetId, value) {
+            if (/^#[0-9A-F]{6}$/i.test(value)) {
+                document.getElementById(targetId).value = value;
+                saveSettings();
+            }
+        }
+
+        function saveSettings() {
+            appState.teamA.name = document.getElementById('inpTeamAName').value.trim().toUpperCase();
+            appState.teamA.color = document.getElementById('inpTeamAColor').value;
+            appState.teamA.textColor = document.getElementById('inpTeamATextColor').value;
+            appState.teamA.logo = document.getElementById('inpTeamALogo').value.trim();
+
+            appState.teamB.name = document.getElementById('inpTeamBName').value.trim().toUpperCase();
+            appState.teamB.color = document.getElementById('inpTeamBColor').value;
+            appState.teamB.textColor = document.getElementById('inpTeamBTextColor').value;
+            appState.teamB.logo = document.getElementById('inpTeamBLogo').value.trim();
+
+            appState.settings.tournament = document.getElementById('inpTournament').value.trim();
+            appState.settings.style = document.getElementById('inpOverlayStyle').value;
+            appState.settings.fontFamily = document.getElementById('inpFontFamily').value;
+            appState.settings.scale = parseFloat(document.getElementById('inpScale').value);
+
+            // Sync hex text inputs
+            document.getElementById('inpTeamAColorTxt').value = appState.teamA.color;
+            document.getElementById('inpTeamATextColorTxt').value = appState.teamA.textColor;
+            document.getElementById('inpTeamBColorTxt').value = appState.teamB.color;
+            document.getElementById('inpTeamBTextColorTxt').value = appState.teamB.textColor;
+
+            saveAndBroadcast();
+        }
+
+        function updateVisibility() {
+            appState.settings.showLogos = document.getElementById('toggleShowLogos').checked;
+            appState.settings.showFouls = document.getElementById('toggleShowFouls').checked;
+            appState.settings.showTimer = document.getElementById('toggleShowTimer').checked;
+            appState.settings.showPeriod = document.getElementById('toggleShowPeriod').checked;
+            appState.settings.showTournament = document.getElementById('toggleShowTournament').checked;
+            appState.settings.showScoreboard = document.getElementById('toggleShowScoreboard').checked;
+
+            saveAndBroadcast();
+        }
+
+        function handleLogoUpload(event, inputTargetId) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    document.getElementById(inputTargetId).value = e.target.result;
+                    saveSettings();
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        function setSportPreset(sport) {
+            if (sport === 'futsal') {
+                appState.settings.showFouls = true;
+                appState.timer.seconds = 0;
+                appState.timer.period = '1º TEMPO';
+            } else if (sport === 'futebol') {
+                appState.settings.showFouls = false;
+                appState.timer.seconds = 0;
+                appState.timer.period = '1º TEMPO';
+            }
+            syncInputsFromState();
+            saveAndBroadcast();
+        }
+
+        function formatTime(totalSeconds) {
+            const mins = Math.floor(totalSeconds / 60);
+            const secs = totalSeconds % 60;
+            return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+        }
+
+        function openOverlayWindow() {
+            const overlayUrl = window.location.href.split('?')[0] + '?mode=overlay';
+            window.open(overlayUrl, 'PlacarLiveOverlay', 'width=1280,height=720,menubar=no,toolbar=no,location=no');
+        }
+
+        function copyOverlayUrl() {
+            const overlayUrl = window.location.href.split('?')[0] + '?mode=overlay';
+            navigator.clipboard.writeText(overlayUrl).then(() => {
+                alert('URL do Overlay copiada para a área de transferência!\n\nCole no OBS Studio em: Fonte de NAVEGADOR (Browser Source).');
+            });
+        }
+
+        function renderOverlay(targetElement) {
+            if (!targetElement) return;
+
+            if (!appState.settings.showScoreboard) {
+                targetElement.innerHTML = '';
+                return;
+            }
+
+            const scale = appState.settings.scale || 1;
+            const font = appState.settings.fontFamily || 'Montserrat';
+
+            // Placeholder logos
+            const logoA = appState.teamA.logo ? `<img src="${appState.teamA.logo}" class="w-7 h-7 object-contain">` : '';
+            const logoB = appState.teamB.logo ? `<img src="${appState.teamB.logo}" class="w-7 h-7 object-contain">` : '';
+
+            let html = '';
+
+            // STYLE 1: TV BROADCAST MODERN
+            if (appState.settings.style === 'tv-modern') {
+                html = `
+                <div class="inline-flex flex-col drop-shadow-2xl font-${font.toLowerCase()}" style="transform: scale(${scale}); transform-origin: top left;">
+                    
+                    ${appState.settings.showTournament && appState.settings.tournament ? `
+                        <div class="bg-black/90 text-amber-400 font-bold text-[10px] uppercase tracking-widest px-3 py-0.5 rounded-t-md w-max border-t border-x border-amber-500/30 flex items-center gap-1.5">
+                            <i class="fa-solid fa-trophy text-[9px]"></i> ${appState.settings.tournament}
+                        </div>
+                    ` : ''}
+
+                    <div class="flex items-stretch bg-gray-950/95 text-white rounded-r-lg overflow-hidden border border-white/10 shadow-2xl">
+                        
+                        <!-- TEAM A -->
+                        <div class="flex items-center px-3.5 py-1.5 gap-2.5" style="background-color: ${appState.teamA.color}; color: ${appState.teamA.textColor};">
+                            ${appState.settings.showLogos && logoA ? logoA : ''}
+                            <span class="font-black text-base tracking-wider uppercase">${appState.teamA.name}</span>
+                            
+                            ${appState.teamA.timeout ? `
+                                <span class="bg-amber-400 text-black text-[9px] font-extrabold px-1 rounded animate-pulse">T</span>
+                            ` : ''}
+                        </div>
+
+                        <!-- SCORE A -->
+                        <div class="bg-black/80 px-3.5 py-1.5 font-teko text-2xl font-black text-white flex items-center justify-center border-r border-white/10 min-w-[36px]">
+                            ${appState.teamA.score}
+                        </div>
+
+                        <!-- SCORE B -->
+                        <div class="bg-black/80 px-3.5 py-1.5 font-teko text-2xl font-black text-white flex items-center justify-center border-l border-white/10 min-w-[36px]">
+                            ${appState.teamB.score}
+                        </div>
+
+                        <!-- TEAM B -->
+                        <div class="flex items-center px-3.5 py-1.5 gap-2.5" style="background-color: ${appState.teamB.color}; color: ${appState.teamB.textColor};">
+                            ${appState.teamB.timeout ? `
+                                <span class="bg-amber-400 text-black text-[9px] font-extrabold px-1 rounded animate-pulse">T</span>
+                            ` : ''}
+                            <span class="font-black text-base tracking-wider uppercase">${appState.teamB.name}</span>
+                            ${appState.settings.showLogos && logoB ? logoB : ''}
+                        </div>
+
+                        <!-- TIMER & PERIOD SECTION -->
+                        <div class="bg-zinc-900/90 border-l border-zinc-700 px-3.5 py-1 flex flex-col justify-center items-center min-w-[90px]">
+                            ${appState.settings.showTimer ? `
+                                <span class="font-teko text-xl font-bold tracking-widest text-emerald-400 leading-none">
+                                    ${formatTime(appState.timer.seconds)}
+                                </span>
+                            ` : ''}
+                            ${appState.settings.showPeriod ? `
+                                <span class="text-[9px] font-extrabold text-gray-300 uppercase tracking-wider leading-none mt-0.5">
+                                    ${appState.timer.period}
+                                </span>
+                            ` : ''}
+                        </div>
+
+                    </div>
+
+                    <!-- FUTSAL FOULS FOOTER BANNER -->
+                    ${appState.settings.showFouls ? `
+                        <div class="flex justify-between items-center bg-black/80 text-[10px] px-3 py-0.5 border-x border-b border-white/10 rounded-b-md text-amber-400 font-bold tracking-wider">
+                            <span>FALTAS: ${appState.teamA.fouls}</span>
+                            <span class="text-gray-500">•</span>
+                            <span>FALTAS: ${appState.teamB.fouls}</span>
+                        </div>
+                    ` : ''}
+
+                </div>
+                `;
+            } 
+            // STYLE 2: MINIMALIST TOP
+            else if (appState.settings.style === 'minimal-top') {
+                html = `
+                <div class="inline-flex items-center bg-black/90 text-white rounded-full p-1.5 shadow-2xl border border-white/15 font-${font.toLowerCase()}" style="transform: scale(${scale}); transform-origin: top left;">
+                    
+                    <!-- Team A -->
+                    <div class="flex items-center px-3 py-1 rounded-full gap-2" style="background-color: ${appState.teamA.color}; color: ${appState.teamA.textColor};">
+                        ${appState.settings.showLogos && logoA ? logoA : ''}
+                        <span class="font-bold text-xs uppercase">${appState.teamA.name}</span>
+                        <span class="font-black text-sm bg-black/30 px-2 py-0.5 rounded-full">${appState.teamA.score}</span>
+                    </div>
+
+                    <!-- VS / Timer Separator -->
+                    <div class="px-3 text-center">
+                        ${appState.settings.showTimer ? `
+                            <div class="font-teko text-lg font-bold text-emerald-400 leading-none">${formatTime(appState.timer.seconds)}</div>
+                        ` : ''}
+                        ${appState.settings.showPeriod ? `
+                            <div class="text-[8px] text-gray-400 uppercase font-semibold">${appState.timer.period}</div>
+                        ` : ''}
+                    </div>
+
+                    <!-- Team B -->
+                    <div class="flex items-center px-3 py-1 rounded-full gap-2" style="background-color: ${appState.teamB.color}; color: ${appState.teamB.textColor};">
+                        <span class="font-black text-sm bg-black/30 px-2 py-0.5 rounded-full">${appState.teamB.score}</span>
+                        <span class="font-bold text-xs uppercase">${appState.teamB.name}</span>
+                        ${appState.settings.showLogos && logoB ? logoB : ''}
+                    </div>
+
+                </div>
+                `;
+            }
+            // STYLE 3: BOTTOM BAR (PREMIER STYLE)
+            else if (appState.settings.style === 'bottom-bar') {
+                html = `
+                <div class="inline-flex flex-col bg-slate-950/95 text-white border-l-4 border-emerald-500 rounded-r-lg shadow-2xl overflow-hidden font-${font.toLowerCase()}" style="transform: scale(${scale}); transform-origin: top left;">
+                    
+                    <div class="flex items-center">
+                        <!-- Team A Bar -->
+                        <div class="flex items-center px-4 py-2 gap-3" style="background-color: ${appState.teamA.color}; color: ${appState.teamA.textColor};">
+                            ${appState.settings.showLogos && logoA ? logoA : ''}
+                            <span class="font-black text-sm uppercase tracking-wide">${appState.teamA.name}</span>
+                        </div>
+                        <div class="bg-black/90 px-3 py-2 text-xl font-black font-teko border-r border-white/10">
+                            ${appState.teamA.score}
+                        </div>
+
+                        <!-- Team B Bar -->
+                        <div class="bg-black/90 px-3 py-2 text-xl font-black font-teko">
+                            ${appState.teamB.score}
+                        </div>
+                        <div class="flex items-center px-4 py-2 gap-3" style="background-color: ${appState.teamB.color}; color: ${appState.teamB.textColor};">
+                            <span class="font-black text-sm uppercase tracking-wide">${appState.teamB.name}</span>
+                            ${appState.settings.showLogos && logoB ? logoB : ''}
+                        </div>
+
+                        <!-- Timer Box -->
+                        <div class="bg-emerald-950/90 px-4 py-2 border-l border-emerald-500/30 flex flex-col items-center">
+                            ${appState.settings.showTimer ? `
+                                <span class="font-teko text-lg font-bold text-emerald-400 leading-none">${formatTime(appState.timer.seconds)}</span>
+                            ` : ''}
+                            ${appState.settings.showPeriod ? `
+                                <span class="text-[8px] font-extrabold text-gray-300 uppercase">${appState.timer.period}</span>
+                            ` : ''}
+                        </div>
+                    </div>
+
+                </div>
+                `;
+            }
+
+            targetElement.innerHTML = html;
+        }
+    </script>
+</body>
+</html>
